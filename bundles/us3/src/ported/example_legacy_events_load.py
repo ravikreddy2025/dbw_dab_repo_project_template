@@ -28,8 +28,14 @@ def run_legacy_events_load(spark, ctx) -> int:
     `ctx` is a dab_common.config.RuntimeContext, passed in by the notebook entry
     point. Every table name comes from it - that is the one change made during
     the lift, and it is what makes the code promotable across environments.
+
+    Note upstream() for the read and table() for the write. That distinction is
+    not optional at stage 1 either: see docs/15-sandbox-isolation.md.
     """
-    source = ctx.table("landing", "kfk_events")
+    # UPSTREAM read - shared, not this sandbox. Even at stage 1 this must be
+    # right: ctx.table() here would read an empty sandbox schema and the job
+    # would "succeed" having processed nothing.
+    source = ctx.upstream("landing", "kfk_events")
     target = ctx.table("curated", "events_legacy")
 
     # ... original Cloudera transformation, unchanged ...

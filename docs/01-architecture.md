@@ -266,8 +266,10 @@ And landing is the largest layer you have; a copy per developer is ten times the
 storage for ten different stale snapshots.
 
 In shared environments `upstream()` and `table()` return the same string, so there
-is no environment branch to get wrong. Full guidance, including sampling and
-shallow clones: [03 §4a](03-developer-guide.md#reading-shared-data).
+is no environment branch to get wrong. Day-to-day mechanics:
+[03 §4a](03-developer-guide.md#reading-shared-data). The rule stated
+framework-neutrally, for when you reimplement this:
+[15 — Sandbox isolation](15-sandbox-isolation.md).
 
 ### The prefix is a boundary, not a convention
 

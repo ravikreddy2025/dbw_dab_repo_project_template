@@ -46,7 +46,11 @@ prefix comes from `${workspace.current_user.short_name}` — never typed by hand
 >
 > **Upstream READS are not prefixed** — `ctx.upstream()` resolves to the shared
 > schema, because a sandbox upstream schema is empty and copying real volume per
-> developer is wasteful. See [03 §4a](03-developer-guide.md#reading-shared-data).
+> developer is wasteful. Mechanics:
+> [03 §4a](03-developer-guide.md#reading-shared-data). The portable rule:
+> [15 — Sandbox isolation](15-sandbox-isolation.md).
+>
+> **Prefix the schema, not the table.** One boundary, applied once.
 
 ### Use cases
 

@@ -15,6 +15,10 @@ def run(spark, ctx: RuntimeContext) -> None:
 
     TODO: replace with real work, or with a call into src/ported/.
     """
-    source = ctx.table("landing", "{{.domain}}")
+    # UPSTREAM read: the landing bundle produces this, not us. `upstream()`
+    # resolves to the SHARED schema, so a sandbox reads real data instead of its
+    # own empty one. See docs/15-sandbox-isolation.md.
+    source = ctx.upstream("landing", "{{.domain}}")
+    # WRITE: `table()`, so it is prefixed in a sandbox and shared elsewhere.
     target = ctx.table("curated", "{{.domain}}")
     print(f"TODO: implement {{.use_case}} logic: {source} -> {target}")

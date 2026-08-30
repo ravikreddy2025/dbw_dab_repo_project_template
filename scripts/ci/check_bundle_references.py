@@ -220,7 +220,12 @@ def check_trigger_scope() -> None:
 #    shared schema. See docs/03-developer-guide.md#reading-shared-data.
 # ---------------------------------------------------------------------------
 def check_upstream_reads() -> None:
-    for job in sorted(BUNDLES.glob("us*/src/jobs/*.py")):
+    # Templates are scanned too. The scaffold shipped `ctx.table("landing", ...)`
+    # once - generated code that fails the repo's own CI check is worse than no
+    # scaffold, because it teaches the wrong pattern to every new use case.
+    targets = sorted(BUNDLES.glob("us*/src/**/*.py"))
+    targets += sorted((REPO / "templates").rglob("*.tmpl"))
+    for job in targets:
         for n, line in enumerate(job.read_text(encoding="utf-8").splitlines(), 1):
             stripped = line.strip()
             if stripped.startswith("#"):
@@ -229,7 +234,8 @@ def check_upstream_reads() -> None:
                 err(
                     f"{rel(job)}:{n}: reads the landing layer with ctx.table(), which is "
                     "sandbox-prefixed and empty in a developer sandbox. Use "
-                    "ctx.upstream(\"landing\", ...) - it resolves to the shared schema."
+                    "ctx.upstream(\"landing\", ...) - it resolves to the shared schema. "
+                    "See docs/15-sandbox-isolation.md."
                 )
 
 

@@ -184,6 +184,9 @@ pytest bundles/us1/tests -q          # now includes the Spark tests
 <a name="reading-shared-data"></a>
 
 The single most important thing to understand about sandboxes on a data project.
+This section is the day-to-day mechanics; the underlying rule, stated
+framework-neutrally so it survives any reimplementation, is
+[15 — Sandbox isolation](15-sandbox-isolation.md).
 
 ### Writes are isolated. Reads are shared.
 

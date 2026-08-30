@@ -31,15 +31,18 @@ About 45 minutes, and you will be able to ship.
 3. [02 — Branching strategy](02-branching-strategy.md) — how your work reaches production
 4. [09 — Walkthrough](09-walkthrough-simulation.md) — watch two developers do it end to end
 5. [04 — Bundle authoring](04-bundle-authoring.md) — when you need to add a job
+6. [15 — Sandbox isolation](15-sandbox-isolation.md) — why your sandbox reads shared
+   data but writes its own, and the one mistake that fails silently
 
-Keep [08 — Troubleshooting](08-troubleshooting.md) open in a tab.
+Then keep two open in tabs: [08 — Troubleshooting](08-troubleshooting.md) and
+[16 — Do's and don'ts](16-dos-and-donts.md).
 
 ### I am porting Cloudera code
 
 Read the developer path above, then:
 
-6. [14 — Porting guide](14-porting-guide.md) — the two-zone model and how code leaves `ported/`
-7. [13 — Migration and cutover](13-migration-and-cutover.md) — how parity is proven
+7. [14 — Porting guide](14-porting-guide.md) — the two-zone model and how code leaves `ported/`
+8. [13 — Migration and cutover](13-migration-and-cutover.md) — how parity is proven
 
 ### I am a lead setting this up
 
@@ -50,7 +53,9 @@ Read the developer path above, then:
 5. [07 — Release process](07-release-process.md) — what you approve and when
 6. [13 — Migration and cutover](13-migration-and-cutover.md) — the go-live gate
 
-Then run [`scripts/setup/Az-DevOps-Bootstrap.ps1`](../scripts/setup/Az-DevOps-Bootstrap.ps1).
+Then work through the ordered setup table in
+[16 — Do's and don'ts, Part 2](16-dos-and-donts.md#part-2--devops-and-platform-leads)
+and run [`scripts/setup/Az-DevOps-Bootstrap.ps1`](../scripts/setup/Az-DevOps-Bootstrap.ps1).
 
 ### I am QA
 
@@ -217,5 +222,9 @@ pwsh ./scripts/dev/Destroy-Sandbox.ps1 -Bundle us1
 | 12 | [Conventions](12-conventions.md) | Naming anything |
 | 13 | [Migration and cutover](13-migration-and-cutover.md) | Proving parity, going live |
 | 14 | [Porting guide](14-porting-guide.md) | Moving Cloudera code in |
+| 15 | [Sandbox isolation](15-sandbox-isolation.md) | Designing the prefix rule into your own framework |
+| 16 | [Do's and don'ts](16-dos-and-donts.md) | Quick reference for developers and DevOps |
 | 13 | [Migration and cutover](13-migration-and-cutover.md) | Proving parity, going live |
 | 14 | [Porting guide](14-porting-guide.md) | Moving Cloudera code in |
+| 15 | [Sandbox isolation](15-sandbox-isolation.md) | Designing the prefix rule into your own framework |
+| 16 | [Do's and don'ts](16-dos-and-donts.md) | Quick reference for developers and DevOps |

@@ -13,9 +13,12 @@ variables:
   dq_fail_on_error:
     description: Whether an error-severity data quality breach fails the job.
     default: "true"
-  recon_enabled:
-    description: Whether the Cloudera parity reconciliation runs. See docs/13.
-    default: "true"
+  dev_sample_rows:
+    description: >-
+      Row cap applied by ctx.sample() to upstream reads IN A SANDBOX ONLY. Zero
+      disables it. Must be 0 in every shared target - a cap that leaked into a
+      shared environment would silently truncate real output.
+    default: 0
   run_as_sp:
     description: Application ID of the run-as service principal. Empty in the dev target.
     default: ""

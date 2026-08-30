@@ -8,6 +8,10 @@
 # MAGIC
 # MAGIC Ported Cloudera code goes in `src/ported/` and is CALLED from here - see
 # MAGIC `docs/14-porting-guide.md`.
+# MAGIC
+# MAGIC Reads use `ctx.upstream(...)`, writes use `ctx.table(...)`. A sandbox reads
+# MAGIC SHARED upstream data and writes its own - see `docs/15-sandbox-isolation.md`.
+# MAGIC Wrap upstream reads in `ctx.sample(...)` to bound the cost in a sandbox.
 
 # COMMAND ----------
 

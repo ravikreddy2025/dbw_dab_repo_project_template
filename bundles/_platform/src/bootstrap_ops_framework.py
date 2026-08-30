@@ -40,11 +40,14 @@ assert not ctx.is_sandbox, "The platform bundle must never run against a sandbox
 
 # ops schema name -> DDL file. Kept in step with dab_common.config.OPS_SCHEMAS
 # by the assertion below, so adding a schema without its DDL fails loudly.
+# One or more DDL files per ops schema. Kept in step with
+# dab_common.config.OPS_SCHEMAS by the assertion below, so adding a schema
+# without its DDL fails loudly rather than producing a half-built ops catalog.
 DDL_FILES = {
-    "audit":  "ddl/ops_audit.sql",
-    "config": "ddl/ops_config.sql",
-    "logs":   "ddl/ops_logs.sql",
-    "recon":  "ddl/ops_recon.sql",
+    "audit":  ["ddl/ops_audit.sql", "ddl/ops_housekeeping.sql"],
+    "config": ["ddl/ops_config.sql"],
+    "logs":   ["ddl/ops_logs.sql"],
+    "recon":  ["ddl/ops_recon.sql"],
 }
 assert set(DDL_FILES) == set(OPS_SCHEMAS), (
     f"DDL files {sorted(DDL_FILES)} do not match OPS_SCHEMAS {sorted(OPS_SCHEMAS)}"

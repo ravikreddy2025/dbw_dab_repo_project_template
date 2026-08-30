@@ -176,5 +176,7 @@ Rationale for each: [docs/01 — Architecture](docs/01-architecture.md).
 | 12 | [Conventions](docs/12-conventions.md) | Naming anything |
 | 13 | [Migration and cutover](docs/13-migration-and-cutover.md) | Proving parity, going live |
 | 14 | [Porting guide](docs/14-porting-guide.md) | Moving Cloudera code in |
+| 15 | [Sandbox isolation](docs/15-sandbox-isolation.md) | Designing the prefix rule into your own framework |
+| 16 | [Do's and don'ts](docs/16-dos-and-donts.md) | Quick reference for developers and DevOps |
 
 Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
