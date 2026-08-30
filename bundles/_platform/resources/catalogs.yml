@@ -24,7 +24,14 @@ resources:
       grants:
         - principal: edp-platform-leads
           privileges: [ALL_PRIVILEGES]
-        - principal: ${var.writer_group}
+        # CREATE_SCHEMA at CATALOG level is what lets ensure_schema() create a
+        # developer sandbox schema at runtime. The developer owns what they
+        # create, which is the only write access they get - the shared schemas
+        # below grant them SELECT and nothing more.
+        - principal: ${var.sandbox_group}
+          privileges: [USE_CATALOG, CREATE_SCHEMA]
+        # The identity that actually writes the shared pipeline output.
+        - principal: ${var.run_as_sp}
           privileges: [USE_CATALOG, CREATE_SCHEMA]
         - principal: ${var.reader_group}
           privileges: [USE_CATALOG]
@@ -35,10 +42,14 @@ resources:
       grants:
         - principal: edp-platform-leads
           privileges: [ALL_PRIVILEGES]
-        # CREATE_SCHEMA is what lets a developer's sandbox schema be created at
-        # runtime by ensure_schema(). In preprod and prod writer_group is the
-        # leads group, so nobody but the platform team can add a schema.
-        - principal: ${var.writer_group}
+        # CREATE_SCHEMA at CATALOG level is what lets ensure_schema() create a
+        # developer sandbox schema at runtime. The developer owns what they
+        # create, which is the only write access they get - the shared schemas
+        # below grant them SELECT and nothing more.
+        - principal: ${var.sandbox_group}
+          privileges: [USE_CATALOG, CREATE_SCHEMA]
+        # The identity that actually writes the shared pipeline output.
+        - principal: ${var.run_as_sp}
           privileges: [USE_CATALOG, CREATE_SCHEMA]
         - principal: ${var.reader_group}
           privileges: [USE_CATALOG]
@@ -49,7 +60,14 @@ resources:
       grants:
         - principal: edp-platform-leads
           privileges: [ALL_PRIVILEGES]
-        - principal: ${var.writer_group}
+        # CREATE_SCHEMA at CATALOG level is what lets ensure_schema() create a
+        # developer sandbox schema at runtime. The developer owns what they
+        # create, which is the only write access they get - the shared schemas
+        # below grant them SELECT and nothing more.
+        - principal: ${var.sandbox_group}
+          privileges: [USE_CATALOG, CREATE_SCHEMA]
+        # The identity that actually writes the shared pipeline output.
+        - principal: ${var.run_as_sp}
           privileges: [USE_CATALOG, CREATE_SCHEMA]
         - principal: ${var.reader_group}
           privileges: [USE_CATALOG]
@@ -67,7 +85,14 @@ resources:
       grants:
         - principal: edp-platform-leads
           privileges: [ALL_PRIVILEGES]
-        - principal: ${var.writer_group}
+        # CREATE_SCHEMA at CATALOG level is what lets ensure_schema() create a
+        # developer sandbox schema at runtime. The developer owns what they
+        # create, which is the only write access they get - the shared schemas
+        # below grant them SELECT and nothing more.
+        - principal: ${var.sandbox_group}
+          privileges: [USE_CATALOG, CREATE_SCHEMA]
+        # The identity that actually writes the shared pipeline output.
+        - principal: ${var.run_as_sp}
           privileges: [USE_CATALOG, CREATE_SCHEMA]
         - principal: ${var.reader_group}
           privileges: [USE_CATALOG]

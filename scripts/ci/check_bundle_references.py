@@ -212,6 +212,27 @@ def check_trigger_scope() -> None:
             )
 
 
+# ---------------------------------------------------------------------------
+# 9. A use-case job must not read the LANDING layer with ctx.table().
+#    table() is sandbox-prefixed, and a developer sandbox landing schema is empty
+#    until they personally run the landing pipeline - so the job reads nothing and
+#    reports success. Cross-bundle reads use ctx.upstream(), which resolves to the
+#    shared schema. See docs/03-developer-guide.md#reading-shared-data.
+# ---------------------------------------------------------------------------
+def check_upstream_reads() -> None:
+    for job in sorted(BUNDLES.glob("us*/src/jobs/*.py")):
+        for n, line in enumerate(job.read_text(encoding="utf-8").splitlines(), 1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            if 'ctx.table("landing"' in stripped:
+                err(
+                    f"{rel(job)}:{n}: reads the landing layer with ctx.table(), which is "
+                    "sandbox-prefixed and empty in a developer sandbox. Use "
+                    "ctx.upstream(\"landing\", ...) - it resolves to the shared schema."
+                )
+
+
 def main() -> int:
     for check in (
         check_pipeline_templates,
@@ -222,6 +243,7 @@ def main() -> int:
         check_doc_links,
         check_no_real_credentials,
         check_trigger_scope,
+        check_upstream_reads,
     ):
         check()
 

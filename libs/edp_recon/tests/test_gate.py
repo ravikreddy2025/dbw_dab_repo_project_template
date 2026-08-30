@@ -130,3 +130,38 @@ def test_statuses_match_the_ddl_comment(status):
 def test_gate_result_is_printable_for_the_run_log():
     assert str(EtlGateResult(proceed=False, reason="nothing ran")).startswith("SKIP: ")
     assert str(EtlGateResult(proceed=True, reason="ok")).startswith("PROCEED: ")
+
+
+# -- the gate must follow the same mode as the comparison ---------------------
+
+def test_gate_reads_the_shared_audit_log_by_default():
+    """Comparing shared tables while checking a sandbox audit log would answer
+    about a different run entirely."""
+    ctx = build_context({"env": "nonprod", "use_case": "us1", "schema_prefix": "sam_"})
+    assert "edp_ops_nonprod.audit.job_run" in build_gate_query(ctx, ["publish_marts"], 24)
+
+
+def test_gate_follows_the_comparison_into_a_sandbox():
+    ctx = build_context({
+        "env": "nonprod", "use_case": "us1",
+        "schema_prefix": "jsmith_", "upstream_mode": "sandbox",
+    })
+    assert "edp_ops_nonprod.jsmith_audit.job_run" in build_gate_query(ctx, ["publish_marts"], 24)
+
+
+def test_gate_and_comparison_never_disagree():
+    """The property: whichever side is compared, the gate checks that side."""
+    from edp_recon.model import ReconCheck, ReconTarget
+    target = ReconTarget(
+        name="t", layer="curated", target_table="orders", source_ref="legacy.orders",
+        checks=(ReconCheck(name="rc", check_type="row_count"),),
+    )
+    for mode, expect_prefix in (("shared", False), ("sandbox", True)):
+        ctx = build_context({
+            "env": "nonprod", "use_case": "us1",
+            "schema_prefix": "jsmith_", "upstream_mode": mode,
+        })
+        compared = target.resolve_target(ctx)
+        gate_sql = build_gate_query(ctx, ["publish_marts"], 24)
+        assert ("jsmith_" in compared) is expect_prefix
+        assert ("jsmith_audit" in gate_sql) is expect_prefix

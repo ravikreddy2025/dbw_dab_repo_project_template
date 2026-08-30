@@ -198,3 +198,92 @@ def test_tags_identify_the_use_case_and_the_sandbox():
 def test_layers_constant_matches_the_catalogs_that_resolve():
     ctx = build_context(SHARED)
     assert {layer: ctx.catalog(layer) for layer in LAYERS}.keys() == set(LAYERS)
+
+
+# -- writes isolated, reads shared -------------------------------------------
+# The asymmetry that makes sandboxes workable on real data volumes. Without it a
+# developer curated job reads its own EMPTY landing schema and silently produces
+# nothing - which looks exactly like a successful run.
+
+def test_sandbox_reads_upstream_from_the_shared_schema():
+    """jsmith has not run the landing pipeline. Reading jsmith_us1 would return
+    an empty table and the job would 'succeed' having produced nothing."""
+    ctx = build_context(SANDBOX)
+    assert ctx.upstream("landing", "kfk_orders") == "edp_landing_nonprod.us1.kfk_orders"
+
+
+def test_sandbox_writes_to_its_own_schema():
+    assert build_context(SANDBOX).table("curated", "orders") == (
+        "edp_curated_nonprod.jsmith_us1.orders"
+    )
+
+
+def test_upstream_and_table_differ_only_inside_a_sandbox():
+    """In every shared environment the two are the same string, so the same code
+    is correct in production with no branch."""
+    shared = build_context(SHARED)
+    assert shared.upstream("landing", "x") == shared.table("landing", "x")
+
+    sandbox = build_context(SANDBOX)
+    assert sandbox.upstream("landing", "x") != sandbox.table("landing", "x")
+
+
+def test_upstream_mode_sandbox_chains_your_own_output():
+    """For when you HAVE materialised your own landing and want to test the
+    whole chain end to end."""
+    ctx = build_context({**SANDBOX, "upstream_mode": "sandbox"})
+    assert ctx.upstream("landing", "kfk_orders") == "edp_landing_nonprod.jsmith_us1.kfk_orders"
+
+
+def test_upstream_mode_defaults_to_shared():
+    assert "jsmith" not in build_context(SANDBOX).upstream("landing", "x")
+
+
+def test_unknown_upstream_mode_is_rejected():
+    """A typo must not silently fall back to reading the wrong schema."""
+    with pytest.raises(ConfigError, match="upstream_mode"):
+        build_context({**SANDBOX, "upstream_mode": "mine"}).upstream("landing", "x")
+
+
+def test_upstream_can_cross_use_cases():
+    """Reading another use case's shared output - a conformed dimension, say."""
+    ctx = build_context(SANDBOX)
+    assert ctx.upstream("curated", "calendar", use_case="us3") == (
+        "edp_curated_nonprod.us3.calendar"
+    )
+
+
+def test_upstream_validates_identifiers():
+    with pytest.raises(ConfigError):
+        build_context(SHARED).upstream("curated", "t; DROP TABLE y")
+
+
+# -- sampling ----------------------------------------------------------------
+
+class _FakeDF:
+    def __init__(self, limited=None):
+        self.limited = limited
+
+    def limit(self, n):
+        return _FakeDF(limited=n)
+
+
+def test_sample_bounds_a_read_in_a_sandbox():
+    ctx = build_context({**SANDBOX, "dev_sample_rows": "100000"})
+    assert ctx.sample(_FakeDF()).limited == 100000
+
+
+def test_sample_is_a_no_op_in_a_shared_environment():
+    """A row cap that leaked into prod would silently truncate real output - a
+    far worse failure than a slow sandbox."""
+    ctx = build_context({**SHARED, "dev_sample_rows": "100000"})
+    assert ctx.sample(_FakeDF()).limited is None
+
+
+def test_sample_is_a_no_op_when_unset():
+    assert build_context(SANDBOX).sample(_FakeDF()).limited is None
+
+
+def test_sample_of_zero_disables_the_cap():
+    ctx = build_context({**SANDBOX, "dev_sample_rows": "0"})
+    assert ctx.sample(_FakeDF()).limited is None

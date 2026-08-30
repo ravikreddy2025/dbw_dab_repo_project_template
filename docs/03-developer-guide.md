@@ -179,6 +179,120 @@ pytest bundles/us1/tests -q          # now includes the Spark tests
 
 ---
 
+## 4a. Working with shared data — reads vs writes
+
+<a name="reading-shared-data"></a>
+
+The single most important thing to understand about sandboxes on a data project.
+
+### Writes are isolated. Reads are shared.
+
+| | Prefixed in a sandbox? | Why |
+|---|---|---|
+| What your job **writes** | **yes** — `jsmith_us1` | Ten people writing `us1.orders` overwrite each other |
+| What your job **reads from upstream** | **no** — shared `us1` | Your sandbox copy is empty, and copying real volume per developer is wasteful |
+
+Two accessors, and the call site chooses:
+
+```python
+source = ctx.upstream("landing", "kfk_orders")   # edp_landing_nonprod.us1.kfk_orders
+target = ctx.table("curated", "orders")          # edp_curated_nonprod.jsmith_us1.orders
+```
+
+**In every shared environment the two return the same string**, because
+`schema_prefix` is empty. The distinction exists only inside a sandbox — which is
+exactly where it matters — so there is no environment branch to get wrong.
+
+### Why not prefix reads too
+
+Two reasons, and the first is fatal:
+
+**Your sandbox upstream schema is empty.** `edp_landing_nonprod.jsmith_us1` does
+not contain anything until *you* run the landing pipeline. A curated job reading it
+processes zero rows and reports success — the worst kind of failure, because it
+looks like a pass.
+
+**Upstream data is large.** Landing is the biggest layer you have. Materialising a
+copy per developer costs ten times the storage and gives ten people ten different
+stale snapshots to disagree about.
+
+### Why prefix writes, then
+
+Because without it the sandbox is not a sandbox:
+
+- jsmith deploys a broken transform, runs it, and shared `us1.orders` is now wrong
+- apatel's datamart job reads it and either fails or produces bad marts
+- nobody can say whose run produced the current state
+- two developers running at once race each other
+
+And it is not just a naming convention — **the grants enforce it**. Developers hold
+`SELECT` on the shared schemas and `CREATE SCHEMA` on the catalog. They own the
+sandbox schema they create and can write it freely; they physically cannot write to
+`us1`. A typo produces a permission error, not a corrupted shared table.
+
+### Chaining your own upstream
+
+When you *are* the landing developer, or you want to test the whole chain against
+your own landed data:
+
+```bash
+databricks bundle run us1_curated --target dev --params upstream_mode=sandbox
+```
+
+Per **run**, not per target — it is a temporary state while you test a chain, not
+how your sandbox normally behaves.
+
+### Keeping sandbox runs cheap
+
+A full rebuild against real volume is fine in nonprod, where it happens once a
+night. Ten developers doing it on every iteration is what makes sandboxes
+expensive. Wrap upstream reads:
+
+```python
+landed = ctx.sample(spark.table(ctx.upstream("landing", "kfk_orders")))
+```
+
+`sample()` applies `dev_sample_rows` **in a sandbox only** and is a no-op
+everywhere else, so the same line is correct in production. `dev_sample_rows` is
+`0` in every shared target — a row cap that leaked into prod would silently
+truncate real output, which is far worse than a slow sandbox.
+
+### When you need a big, writable copy
+
+Testing a `MERGE`, a backfill, or a schema migration needs real data you can
+write to. Do not copy it — **shallow clone** it. Zero data movement, fully
+writable, completely isolated:
+
+```sql
+CREATE TABLE edp_curated_nonprod.jsmith_us1.orders
+SHALLOW CLONE edp_curated_nonprod.us1.orders;
+```
+
+The clone shares the underlying files until you write, then diverges. Drop it when
+you are done; the shared table is untouched either way.
+
+Use a **deep clone** only if you need the data to survive the source being
+vacuumed — it does copy, so treat it as a real cost.
+
+### The decision, in one table
+
+| You want to… | Use |
+|---|---|
+| Read upstream data another pipeline produced | `ctx.upstream(layer, table)` |
+| Read what *your* job wrote earlier in the chain | `ctx.table(layer, table)` |
+| Write anything | `ctx.table(layer, table)` |
+| Read another use case's shared output | `ctx.upstream(layer, table, use_case="us3")` |
+| Test against your own upstream output | `--params upstream_mode=sandbox` |
+| Keep a sandbox run cheap | `ctx.sample(...)` + `dev_sample_rows` |
+| Get a big writable copy to test a MERGE | `SHALLOW CLONE` |
+| Reconcile **your own** port against Cloudera | `databricks bundle run recon_us1 -t dev --params upstream_mode=sandbox` |
+| Reconcile the **shared** output (QA authoring a check) | `databricks bundle run recon_us1 -t dev` |
+
+A CI check fails the build if a use-case job reads the landing layer with
+`ctx.table()` — the mistake is easy to make and silent when made.
+
+---
+
 ## 5. Before you push
 
 ```bash
@@ -302,8 +416,9 @@ Use `bundle run`.
 **"My job is called `[dev jsmith] …` and I did not do that."** Also correct — that is
 `mode: development` keeping your jobs distinguishable from the other nine developers'.
 
-**"I deployed but my table is not in `landing`."** It is in `jsmith_us1`. Your
-sandbox writes to your own schemas.
+**"I deployed but my table is not in the shared schema."** It is in `jsmith_us1`.
+Your sandbox WRITES to your own schemas and READS upstream from the shared ones —
+see [§4a](#reading-shared-data).
 
 **"`bundle deploy` says a wheel is missing."** Run `Build-Wheels.ps1` first, or use
 `Deploy-Sandbox.ps1`, which does it for you.

@@ -20,9 +20,12 @@ from us2_module.curated import conform_customers, dedupe_by_key
 ctx = build_context(dbutils.widgets.getAll())
 fail_on_error = str(ctx.extra.get("dq_fail_on_error", "true")).lower() == "true"
 
-# Landed by the SHARED landing bundle into this use case schema of the landing
-# catalog. us2 reads it; it never writes there.
-source = ctx.table("landing", "ora_customers")
+# UPSTREAM read. `upstream()` rather than `table()` because the landing bundle
+# produces this, not us - so in a sandbox it resolves to the SHARED
+# edp_landing_nonprod.us2, not to an empty jsmith_us2. Chain your own landing
+# output instead with `--params upstream_mode=sandbox`.
+source = ctx.upstream("landing", "ora_customers")
+# Written by us, so `table()`: prefixed in a sandbox, shared elsewhere.
 target = ctx.table("curated", "customers")
 print(f"{source} -> {target}")
 
@@ -33,7 +36,11 @@ print(f"{source} -> {target}")
 with audited_run(spark, ctx, layer="curated"):
     ensure_schema(spark, ctx, "curated")
 
-    landed = spark.table(source)
+    # sample() bounds the read in a sandbox and is a no-op everywhere else, so
+    # the same line is correct in production. Set dev_sample_rows on the dev
+    # target; a full rebuild of a large upstream table ten times a day is the
+    # thing that makes sandboxes expensive.
+    landed = ctx.sample(spark.table(source))
 
     # >>> PLACEHOLDER: replace with the ported us2 transformation. <<<
     curated = conform_customers(landed)

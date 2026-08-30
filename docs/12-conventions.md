@@ -40,9 +40,13 @@ case owns them.
 **Sandbox schemas** carry the developer prefix: `jsmith_us1`, `jsmith_audit`. The
 prefix comes from `${workspace.current_user.short_name}` — never typed by hand.
 
-> **THE ONE RULE.** Every schema this framework touches is prefixed in a sandbox,
-> ops included. If `ops.config` were shared, a developer seeding test sources
-> would overwrite the registry that shared nonprod jobs read.
+> **THE RULE.** Every schema a job **writes** is prefixed in a sandbox, ops
+> included. If `ops.config` were shared and developer-writable, a developer
+> seeding test sources would overwrite the registry shared nonprod jobs read.
+>
+> **Upstream READS are not prefixed** — `ctx.upstream()` resolves to the shared
+> schema, because a sandbox upstream schema is empty and copying real volume per
+> developer is wasteful. See [03 §4a](03-developer-guide.md#reading-shared-data).
 
 ### Use cases
 
@@ -139,8 +143,11 @@ env  use_case  catalog_prefix  schema_prefix  max_retries  run_as_sp  alert_emai
 ```
 
 Plus where relevant: `min_workers`, `max_workers`, `runtime_engine`, `photon`,
-`etl_policy_id`, `warehouse_id`, `dq_fail_on_error` (use-case bundles),
-`recon_enabled` and `etl_window_hours` (the recon bundle only).
+`etl_policy_id`, `warehouse_id`, `dq_fail_on_error`, `dev_sample_rows` (use-case
+bundles), `recon_enabled` and `etl_window_hours` (the recon bundle only).
+
+`dev_sample_rows` is non-zero **only** on a `dev` target. A row cap that leaked
+into a shared environment would silently truncate real output.
 
 > `photon` is a **boolean** for declarative pipelines. `runtime_engine` is an
 > **enum** (`STANDARD` / `PHOTON`) for job clusters. Two names for one idea, kept

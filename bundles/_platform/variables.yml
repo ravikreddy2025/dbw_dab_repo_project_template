@@ -28,8 +28,13 @@ variables:
       This grant disappears with the recon bundle at decommission.
   reader_group:
     description: Group granted read access across this environment.
-  writer_group:
-    description: Group allowed to create and modify objects in this environment.
+  sandbox_group:
+    description: >-
+      Group allowed to CREATE SCHEMA in the data catalogs, so a developer sandbox
+      schema can be created at runtime by ensure_schema(). The creator owns the
+      schema and can write it freely; that ownership is the only write access a
+      developer has. edp-developers in nonprod, leads only in preprod and prod -
+      nobody hand-creates a schema in an environment with real consumers.
   alert_email:
     description: Destination for job failure notifications.
 

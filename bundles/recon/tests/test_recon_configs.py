@@ -133,12 +133,37 @@ def test_targets_resolve_into_the_right_catalogs(path):
 
 
 @pytest.mark.parametrize("path", CONFIGS, ids=lambda p: p.stem)
-def test_sandbox_reconciles_the_developer_own_tables(path):
-    """A developer checking their port must compare THEIR output, not shared
-    nonprod - otherwise the check says nothing about their change."""
-    ctx = build_context({"env": "nonprod", "use_case": path.stem, "schema_prefix": "jsmith_"})
+def test_a_sandbox_run_defaults_to_the_shared_tables(path):
+    """QA authoring a config is the primary sandbox user, and their own schema is
+    empty - they never run ETL. Defaulting to the sandbox would compare an empty
+    table and report a meaningless mismatch on every run."""
+    ctx = build_context({"env": "nonprod", "use_case": path.stem, "schema_prefix": "sam_"})
+    for target in _load(path).targets:
+        assert ".sam_" not in target.resolve_target(ctx)
+
+
+@pytest.mark.parametrize("path", CONFIGS, ids=lambda p: p.stem)
+def test_a_developer_can_opt_in_to_checking_their_own_port(path):
+    """The other sandbox user. Explicit, because taking the wrong branch here
+    silently reports a PASS about code the developer did not write - a false pass
+    on the migration gate."""
+    ctx = build_context({
+        "env": "nonprod", "use_case": path.stem,
+        "schema_prefix": "jsmith_", "upstream_mode": "sandbox",
+    })
     for target in _load(path).targets:
         assert f".jsmith_{path.stem}." in target.resolve_target(ctx)
+
+
+@pytest.mark.parametrize("path", CONFIGS, ids=lambda p: p.stem)
+def test_sandbox_results_stay_out_of_the_shared_evidence_base(path):
+    """Whatever is READ, results are always WRITTEN to the sandbox recon schema,
+    so a developer run can never count toward cutover."""
+    ctx = build_context({
+        "env": "nonprod", "use_case": path.stem,
+        "schema_prefix": "jsmith_", "upstream_mode": "sandbox",
+    })
+    assert ctx.recon_table("parity_run") == "edp_ops_nonprod.jsmith_recon.parity_run"
 
 
 @pytest.mark.parametrize("path", CONFIGS, ids=lambda p: p.stem)

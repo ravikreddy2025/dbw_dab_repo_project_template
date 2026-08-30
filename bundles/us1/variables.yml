@@ -27,6 +27,15 @@ variables:
       check for the first time in preprod.
     default: "true"
 
+  dev_sample_rows:
+    description: >-
+      Row cap applied by ctx.sample() to upstream reads IN A SANDBOX ONLY. Zero
+      disables it. A full rebuild against real volume is fine in nonprod, where it
+      happens once a night; ten developers doing it on every iteration is what
+      makes sandboxes expensive. Always 0 in shared environments - the cap must
+      never silently truncate real output.
+    default: 0
+
   run_as_sp:
     description: Application ID of the run-as service principal. Empty in the dev target.
     default: ""

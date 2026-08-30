@@ -33,10 +33,35 @@ if str(ctx.extra.get("recon_enabled", "true")).lower() != "true":
         f"recon_enabled=false in {ctx.env} - reconciliation is retired for this environment."
     )
 
+mode = (ctx.extra.get("upstream_mode") or "shared").strip().lower()
+
 print(f"use case : {ctx.use_case}")
 print(f"env      : {ctx.env}")
-print(f"target   : {ctx.fq_schema('curated')} / {ctx.fq_schema('datamart')}")
 print(f"results  : {ctx.recon_table('parity_run')}")
+
+# WHOSE TABLES ARE BEING CHECKED. Recon consumes tables it does not produce, and
+# in a sandbox the two legitimate users want opposite things: QA authoring a
+# config needs the SHARED tables (their own schema is empty - they never run
+# ETL), while a developer checking a port needs THEIR OWN.
+#
+# Getting it wrong in the developer direction is the dangerous one: comparing
+# shared tables would report a PASS about code the developer did not write. On
+# the migration gate that is the most expensive failure available, so the run
+# says plainly what it compared rather than leaving it to be inferred.
+if ctx.is_sandbox:
+    print()
+    print("=" * 70)
+    if mode == "shared":
+        print("  SANDBOX RUN - comparing the SHARED tables, NOT your own")
+        print(f"  curated  : {ctx.upstream('curated', '<table>')}")
+        print("  If you are checking YOUR OWN port, this run tells you nothing.")
+        print("  Re-run with:  --params upstream_mode=sandbox")
+    else:
+        print("  SANDBOX RUN - comparing YOUR OWN tables")
+        print(f"  curated  : {ctx.table('curated', '<table>')}")
+        print("  Results go to your own recon schema and are NOT cutover evidence.")
+    print("=" * 70)
+    print()
 
 # COMMAND ----------
 

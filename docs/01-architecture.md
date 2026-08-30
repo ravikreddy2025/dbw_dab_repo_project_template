@@ -249,6 +249,35 @@ ctx.table("curated", "orders")
 
 Same code. No `if env == "prod"` anywhere in the repo.
 
+### Writes are isolated. Reads are shared.
+
+The prefix applies to what a job **writes**, not to what it **reads from
+upstream**. That asymmetry is what makes sandboxes workable on real data volumes:
+
+```python
+source = ctx.upstream("landing", "kfk_orders")   # SHARED  edp_landing_nonprod.us1
+target = ctx.table("curated", "orders")          # MINE    ...jsmith_us1
+```
+
+Prefixing reads as well would be actively harmful. A sandbox landing schema is
+empty until that developer personally runs the landing pipeline, so a curated job
+reading it processes zero rows and *reports success* — the worst kind of failure.
+And landing is the largest layer you have; a copy per developer is ten times the
+storage for ten different stale snapshots.
+
+In shared environments `upstream()` and `table()` return the same string, so there
+is no environment branch to get wrong. Full guidance, including sampling and
+shallow clones: [03 §4a](03-developer-guide.md#reading-shared-data).
+
+### The prefix is a boundary, not a convention
+
+Developers hold `SELECT` on the shared schemas and `CREATE SCHEMA` on the catalog.
+They own the sandbox schema `ensure_schema()` creates for them and write it freely;
+they **cannot** write to `us1` at all. Only the run-as service principal can.
+
+A typo in a table name therefore produces a permission error, not a corrupted
+shared table that four other people are reading.
+
 ### The one rule
 
 **Every schema this framework touches is prefixed in a sandbox — ops included.**

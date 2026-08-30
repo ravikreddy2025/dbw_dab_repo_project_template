@@ -4,10 +4,10 @@
 # and no use case owns them. That is why the ops catalog is the one place where
 # the schema axis is a function rather than a use case.
 #
-# All four are still sandbox-prefixed at runtime (jsmith_config, jsmith_audit).
-# THE ONE RULE: every schema this framework touches is prefixed in a sandbox. If
-# ops.config were shared, a developer seeding their own landing sources would
-# overwrite the registry that shared nonprod jobs read from.
+# All four are still sandbox-prefixed at runtime (jsmith_config, jsmith_audit),
+# and the shared ones are writable only by the run-as service principal. If
+# ops.config were shared AND developer-writable, a developer seeding their own
+# landing sources would overwrite the registry that shared nonprod jobs read.
 
 resources:
   schemas:
@@ -21,7 +21,7 @@ resources:
           privileges: [ALL_PRIVILEGES]
         # Every job in every bundle appends audit rows, so MODIFY is broader
         # here than in the data layers. Safe because the tables are append-only.
-        - principal: ${var.writer_group}
+        - principal: ${var.run_as_sp}
           privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
         - principal: ${var.reader_group}
           privileges: [USE_SCHEMA, SELECT]
@@ -37,7 +37,7 @@ resources:
       grants:
         - principal: edp-platform-leads
           privileges: [ALL_PRIVILEGES]
-        - principal: ${var.writer_group}
+        - principal: ${var.run_as_sp}
           privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
         - principal: ${var.reader_group}
           privileges: [USE_SCHEMA, SELECT]
@@ -49,7 +49,7 @@ resources:
       grants:
         - principal: edp-platform-leads
           privileges: [ALL_PRIVILEGES]
-        - principal: ${var.writer_group}
+        - principal: ${var.run_as_sp}
           privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
         - principal: ${var.reader_group}
           privileges: [USE_SCHEMA, SELECT]
@@ -71,7 +71,7 @@ resources:
         # its own exam results.
         - principal: ${var.recon_sp}
           privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
-        - principal: ${var.writer_group}
+        - principal: ${var.run_as_sp}
           privileges: [USE_SCHEMA, SELECT]
         - principal: ${var.reader_group}
           privileges: [USE_SCHEMA, SELECT]

@@ -43,6 +43,13 @@ resources:
           default: ${bundle.target}
         - name: dq_fail_on_error
           default: ${var.dq_fail_on_error}
+        - name: dev_sample_rows
+          default: ${var.dev_sample_rows}
+        # Read upstream from the SHARED schema. Override per run with
+        #   --params upstream_mode=sandbox
+        # when you have materialised your own landing and want to chain it.
+        - name: upstream_mode
+          default: shared
 
       tasks:
         - task_key: curate

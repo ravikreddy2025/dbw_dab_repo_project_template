@@ -23,12 +23,28 @@ and config are not owned by any single use case:
 
     edp_ops_nonprod.audit / .config / .logs / .recon
 
-THE ONE RULE
-------------
-Every schema this framework touches is prefixed with `schema_prefix` in a
-developer sandbox - data catalogs AND ops. One rule, no exceptions. A developer
-seeding config into `jsmith_config` can never overwrite the shared registry that
-shared nonprod jobs read from. An inconsistent rule here would be a footgun.
+WRITES ARE ISOLATED. READS ARE SHARED.
+--------------------------------------
+This is the distinction that makes sandboxes workable on real data volumes.
+
+WRITE isolation is essential: ten developers writing `curated.us1.orders` would
+overwrite each other, break the colleagues reading it, and leave nobody able to
+say whose run produced the current state. So everything a job WRITES is
+prefixed - `jsmith_us1` - and the grants make it physically impossible to write
+to a shared schema in the first place.
+
+READ isolation is actively harmful. Upstream data is large; copying landing per
+developer is wasteful, slow, and gives everyone a different stale copy. Worse,
+a sandbox upstream schema is EMPTY until that developer also runs the upstream
+pipeline - so a curated job reading its own sandbox landing reads nothing.
+
+Hence two accessors, and the call site chooses:
+
+    ctx.table("curated", "orders")       what I produce -> jsmith_us1 in a sandbox
+    ctx.upstream("landing", "kfk_orders") what I consume -> shared us1, always
+
+In shared environments the two are identical, because `schema_prefix` is empty.
+The distinction exists only inside a sandbox, which is exactly where it matters.
 
 JOB PARAMETERS
 --------------
@@ -177,6 +193,79 @@ class RuntimeContext:
         """
         validate_identifier(table, "table")
         return f"{self.fq_schema(layer, use_case)}.{table}"
+
+    def upstream(self, layer: str, table: str, use_case: str | None = None) -> str:
+        """Fully-qualified name of a table this job CONSUMES but does not produce.
+
+        In a sandbox this deliberately resolves to the SHARED schema, not yours:
+
+            ctx.upstream("landing", "kfk_orders")
+                -> edp_landing_nonprod.us1.kfk_orders   even for jsmith
+
+        Two reasons. Your sandbox landing schema is empty unless you personally
+        ran the landing pipeline, so a prefixed read would return nothing. And
+        upstream tables are large - materialising one per developer is wasteful
+        and leaves ten people testing against ten different stale copies.
+
+        OVERRIDE, when you have deliberately materialised your own upstream and
+        want to chain your sandbox end to end:
+
+            databricks bundle run us1_curated -t dev --params upstream_mode=sandbox
+
+        Set per run rather than per target, because it is a temporary state
+        while you are testing a chain - not how the sandbox normally behaves.
+        """
+        mode = (self.extra.get("upstream_mode") or "shared").strip().lower()
+        if mode not in ("shared", "sandbox"):
+            raise ConfigError(
+                f"upstream_mode must be 'shared' or 'sandbox', got {mode!r}"
+            )
+        if mode == "sandbox":
+            return self.table(layer, table, use_case)
+
+        validate_identifier(table, "table")
+        target_uc = use_case or self.use_case
+        validate_identifier(target_uc, "use_case")
+        # No schema_prefix: this is the shared, pipeline-produced table.
+        return f"{self.catalog(layer)}.{target_uc}.{table}"
+
+    def upstream_ops_table(self, ops_schema: str, table: str) -> str:
+        """Ops table belonging to whoever produced the data being read.
+
+        The counterpart to `upstream()` for the ops catalog. A job that reads
+        SHARED data must check the SHARED audit log, and a job reading a
+        sandbox must check that sandbox's audit log - otherwise the two
+        disagree and a gate built on the audit log answers about the wrong run.
+
+        Honours `upstream_mode` exactly like `upstream()`.
+        """
+        mode = (self.extra.get("upstream_mode") or "shared").strip().lower()
+        if mode not in ("shared", "sandbox"):
+            raise ConfigError(f"upstream_mode must be 'shared' or 'sandbox', got {mode!r}")
+        if mode == "sandbox":
+            return self.ops_table(ops_schema, table)
+
+        if ops_schema not in OPS_SCHEMAS:
+            raise ConfigError(f"Unknown ops schema: {ops_schema!r}. Expected one of {OPS_SCHEMAS}")
+        validate_identifier(table, "table")
+        return f"{self.catalog('ops')}.{ops_schema}.{table}"
+
+    def sample(self, df):
+        """Bound a read in a sandbox. A no-op in every shared environment.
+
+        A full rebuild of a 500GB curated table is fine in nonprod, where it
+        happens once. Ten developers each doing it on every iteration is not.
+        Set `dev_sample_rows` on the dev target and wrap upstream reads:
+
+            landed = ctx.sample(spark.table(ctx.upstream("landing", "kfk_orders")))
+
+        Returns the DataFrame untouched outside a sandbox, so the same line is
+        correct in production - there is no branch to forget to remove.
+        """
+        rows = int(self.extra.get("dev_sample_rows") or 0)
+        if self.is_sandbox and rows > 0:
+            return df.limit(rows)
+        return df
 
     # -- ops -----------------------------------------------------------------
 

@@ -143,8 +143,25 @@ class ReconTarget:
             raise ReconError(f"{self.name}: duplicate check name(s) {sorted(dupes)}")
 
     def resolve_target(self, ctx: RuntimeContext) -> str:
-        """Fully-qualified Databricks table, sandbox-aware like everything else."""
-        return ctx.table(self.layer, self.target_table)
+        """The Databricks table to compare against the legacy side.
+
+        Uses `upstream()`, NOT `table()`: recon consumes tables it does not
+        produce, so in a sandbox it must be told whose output to check.
+
+        There is no safe default here, and the two sandbox users want opposite
+        things:
+
+          QA authoring a config      -> the SHARED tables. Their own sandbox
+                                        schema is empty; they never run ETL.
+          A developer checking a port -> THEIR OWN tables. Reading shared would
+                                        compare code they did not write and
+                                        report a PASS that means nothing.
+
+        The second failure is the dangerous one - a false pass on the migration
+        gate - so the mode is explicit (`upstream_mode`) and the notebook prints
+        which schema it actually compared.
+        """
+        return ctx.upstream(self.layer, self.target_table)
 
 
 @dataclass

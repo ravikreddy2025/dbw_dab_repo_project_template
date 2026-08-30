@@ -2,7 +2,14 @@
 #
 # Business-facing marts (gold / semantic). Written by the owning use-case bundle.
 #
-# WHY THESE ARE DECLARED HERE AND NOT IN THE USE-CASE BUNDLES:
+# WHO CAN WRITE THESE
+# Only ${var.run_as_sp} - the identity CI deploys jobs to run as. NOT developers.
+# A developer writes to their own sandbox schema (jsmith_us1), which they create
+# and own via CREATE_SCHEMA on the catalog. That makes the sandbox prefix a
+# boundary the metastore enforces, rather than a naming convention a typo can
+# cross. See docs/03-developer-guide.md#reading-shared-data.
+#
+# WHY THESE ARE DECLARED HERE AND NOT IN THE USE-CASE BUNDLES
 # In `mode: development` DABs prefixes resource names with "[dev jsmith] ", which
 # is not a legal Unity Catalog schema name - so a use-case bundle that declared a
 # schema would break the moment a developer deployed their sandbox. Shared schemas
@@ -20,14 +27,16 @@ resources:
       grants:
         - principal: edp-platform-leads
           privileges: [ALL_PRIVILEGES]
-        - principal: ${var.writer_group}
+        # The ONLY writer. Everyone else reads.
+        - principal: ${var.run_as_sp}
           privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+        # The owning team reads the shared table and writes only their sandbox.
         - principal: ${var.owner_us1}
-          privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+          privileges: [USE_SCHEMA, SELECT]
         - principal: ${var.reader_group}
           privileges: [USE_SCHEMA, SELECT]
-        # Read-only. Reconciliation must be able to see what the ETL produced
-        # without any ability to change it.
+        # Read-only: reconciliation must see what the ETL produced without any
+        # ability to change it.
         - principal: ${var.recon_sp}
           privileges: [USE_SCHEMA, SELECT]
 
@@ -38,14 +47,16 @@ resources:
       grants:
         - principal: edp-platform-leads
           privileges: [ALL_PRIVILEGES]
-        - principal: ${var.writer_group}
+        # The ONLY writer. Everyone else reads.
+        - principal: ${var.run_as_sp}
           privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+        # The owning team reads the shared table and writes only their sandbox.
         - principal: ${var.owner_us2}
-          privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+          privileges: [USE_SCHEMA, SELECT]
         - principal: ${var.reader_group}
           privileges: [USE_SCHEMA, SELECT]
-        # Read-only. Reconciliation must be able to see what the ETL produced
-        # without any ability to change it.
+        # Read-only: reconciliation must see what the ETL produced without any
+        # ability to change it.
         - principal: ${var.recon_sp}
           privileges: [USE_SCHEMA, SELECT]
 
@@ -56,14 +67,16 @@ resources:
       grants:
         - principal: edp-platform-leads
           privileges: [ALL_PRIVILEGES]
-        - principal: ${var.writer_group}
+        # The ONLY writer. Everyone else reads.
+        - principal: ${var.run_as_sp}
           privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+        # The owning team reads the shared table and writes only their sandbox.
         - principal: ${var.owner_us3}
-          privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+          privileges: [USE_SCHEMA, SELECT]
         - principal: ${var.reader_group}
           privileges: [USE_SCHEMA, SELECT]
-        # Read-only. Reconciliation must be able to see what the ETL produced
-        # without any ability to change it.
+        # Read-only: reconciliation must see what the ETL produced without any
+        # ability to change it.
         - principal: ${var.recon_sp}
           privileges: [USE_SCHEMA, SELECT]
 
@@ -74,14 +87,16 @@ resources:
       grants:
         - principal: edp-platform-leads
           privileges: [ALL_PRIVILEGES]
-        - principal: ${var.writer_group}
+        # The ONLY writer. Everyone else reads.
+        - principal: ${var.run_as_sp}
           privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+        # The owning team reads the shared table and writes only their sandbox.
         - principal: ${var.owner_us4}
-          privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+          privileges: [USE_SCHEMA, SELECT]
         - principal: ${var.reader_group}
           privileges: [USE_SCHEMA, SELECT]
-        # Read-only. Reconciliation must be able to see what the ETL produced
-        # without any ability to change it.
+        # Read-only: reconciliation must see what the ETL produced without any
+        # ability to change it.
         - principal: ${var.recon_sp}
           privileges: [USE_SCHEMA, SELECT]
 
@@ -92,13 +107,15 @@ resources:
       grants:
         - principal: edp-platform-leads
           privileges: [ALL_PRIVILEGES]
-        - principal: ${var.writer_group}
+        # The ONLY writer. Everyone else reads.
+        - principal: ${var.run_as_sp}
           privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+        # The owning team reads the shared table and writes only their sandbox.
         - principal: ${var.owner_us5}
-          privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+          privileges: [USE_SCHEMA, SELECT]
         - principal: ${var.reader_group}
           privileges: [USE_SCHEMA, SELECT]
-        # Read-only. Reconciliation must be able to see what the ETL produced
-        # without any ability to change it.
+        # Read-only: reconciliation must see what the ETL produced without any
+        # ability to change it.
         - principal: ${var.recon_sp}
           privileges: [USE_SCHEMA, SELECT]

@@ -50,11 +50,16 @@ def build_gate_query(ctx: RuntimeContext, job_names: list[str], within_hours: in
     `use_case` is filtered as well as the task name, because ops.audit.job_run is
     shared across every use case - without it, a successful us3 run would satisfy
     the gate for us1.
+
+    Reads the audit log via `upstream_ops_table`, so it follows the SAME
+    `upstream_mode` as the tables being compared. Checking the shared audit log
+    while comparing sandbox tables (or the reverse) would answer about a
+    different run entirely.
     """
     names = ", ".join("'" + n.replace("'", "''") + "'" for n in job_names)
     return f"""
         SELECT max(ended_at) AS last_success
-        FROM {ctx.audit_table('job_run')}
+        FROM {ctx.upstream_ops_table('audit', 'job_run')}
         WHERE use_case = '{ctx.use_case}'
           AND env      = '{ctx.env}'
           AND status   = 'SUCCESS'

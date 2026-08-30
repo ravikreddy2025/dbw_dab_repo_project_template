@@ -76,6 +76,44 @@ Onboarding a sixth use case is a config file and a job entry. Never code.
 and retire independently: us2 can cut over and have its job removed while us4 is
 still in parallel run.
 
+### Whose tables does recon check?
+
+Recon **consumes** tables it does not produce, so in a sandbox it has to be told
+whose output to look at. There is no safe default, because the two sandbox users
+want opposite things:
+
+| Who | Wants | Why |
+|---|---|---|
+| **QA** authoring a config | the **shared** tables | QA never runs ETL; their own sandbox schema is empty |
+| **A developer** checking a port | **their own** tables | Reading shared would check code they did not write |
+
+So it is explicit, using the same `upstream_mode` mechanism as everything else:
+
+```bash
+# QA, testing a new check against real pipeline output (the default)
+databricks bundle run recon_us1 --target dev
+
+# A developer, checking their own port before handing it over
+databricks bundle run recon_us1 --target dev --params upstream_mode=sandbox
+```
+
+The default is `shared` rather than `sandbox` because of which failure is worse.
+A developer who forgets the flag compares shared tables and gets a **PASS about
+code they did not write** — a false pass on the migration gate, the most expensive
+failure available here. So the run prints a banner in a sandbox saying exactly
+which schema it compared, and tells you the flag if you took the default.
+
+In preprod and prod the setting is meaningless: `schema_prefix` is empty, so both
+modes name the same table. There is no environment branch to get wrong.
+
+**The ETL gate follows the same mode.** Checking the shared audit log while
+comparing sandbox tables would answer about a different run entirely.
+
+**Sandbox results are never cutover evidence.** Writes stay prefixed regardless of
+read mode, so a sandbox run lands in `jsmith_recon.parity_run` and the shared
+evidence base never sees it. `cutover_readiness` needs no filter for this — the
+rows are simply not in the schema it reads.
+
 ---
 
 ## 2. The four phases

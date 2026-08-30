@@ -184,10 +184,15 @@ def test_target_resolves_through_the_normal_catalog_rules():
     assert target.resolve_target(ctx) == "edp_curated_preprod.us1.customer"
 
 
-def test_target_resolution_is_sandbox_aware():
+def test_target_resolution_is_sandbox_aware_only_when_asked():
+    """Recon CONSUMES these tables; it does not produce them. A sandbox run
+    checks its own output only when told to - see the upstream_mode tests below."""
     target = load_recon_config(CONFIG).targets[0]
-    ctx = build_context({"env": "nonprod", "use_case": "us1", "schema_prefix": "jsmith_"})
-    assert target.resolve_target(ctx) == "edp_curated_nonprod.jsmith_us1.customer"
+    sandbox = {"env": "nonprod", "use_case": "us1", "schema_prefix": "jsmith_"}
+    assert target.resolve_target(build_context(sandbox)) == "edp_curated_nonprod.us1.customer"
+    assert target.resolve_target(
+        build_context({**sandbox, "upstream_mode": "sandbox"})
+    ) == "edp_curated_nonprod.jsmith_us1.customer"
 
 
 def test_layer_defaults_to_curated():
@@ -211,3 +216,67 @@ def test_unknown_layer_fails_when_resolved():
 
 def test_recon_targets_can_reference_a_shared_target_type():
     assert isinstance(load_recon_config(CONFIG).targets[0], ReconTarget)
+
+
+# -- whose tables does recon compare? ----------------------------------------
+# Recon CONSUMES tables it does not produce, so in a sandbox it must be told
+# whose output to check. The two sandbox users want opposite things and the
+# failure modes are asymmetric, so nothing here is left to a default.
+
+def test_shared_environments_resolve_identically_whatever_the_mode():
+    """upstream_mode is meaningless outside a sandbox - schema_prefix is empty,
+    so both modes name the same table. No environment branch to get wrong."""
+    target = load_recon_config(CONFIG).targets[0]
+    a = build_context({"env": "prod", "use_case": "us1"})
+    b = build_context({"env": "prod", "use_case": "us1", "upstream_mode": "sandbox"})
+    assert target.resolve_target(a) == target.resolve_target(b)
+
+
+def test_qa_authoring_a_config_compares_the_shared_tables():
+    """QA never runs ETL, so their own sandbox schema is empty. Comparing it
+    would report a huge mismatch that says nothing about the config."""
+    target = load_recon_config(CONFIG).targets[0]
+    sam = build_context({"env": "nonprod", "use_case": "us1", "schema_prefix": "sam_"})
+    assert target.resolve_target(sam) == "edp_curated_nonprod.us1.customer"
+
+
+def test_a_developer_can_check_their_own_port():
+    target = load_recon_config(CONFIG).targets[0]
+    dev = build_context({
+        "env": "nonprod", "use_case": "us1",
+        "schema_prefix": "jsmith_", "upstream_mode": "sandbox",
+    })
+    assert target.resolve_target(dev) == "edp_curated_nonprod.jsmith_us1.customer"
+
+
+def test_the_dangerous_default_is_not_the_default():
+    """Defaulting to 'sandbox' would mean a developer who forgot to materialise
+    their output compares an empty table - loud but safe. Defaulting the OTHER
+    way round is what this asserts against: a sandbox run must never silently
+    read shared tables while claiming to check a port. It is explicit, and the
+    notebook prints which it used."""
+    target = load_recon_config(CONFIG).targets[0]
+    dev = build_context({"env": "nonprod", "use_case": "us1", "schema_prefix": "jsmith_"})
+    resolved = target.resolve_target(dev)
+    assert "jsmith_" not in resolved          # default is shared...
+    assert resolved == "edp_curated_nonprod.us1.customer"
+
+
+def test_an_unknown_mode_is_rejected_rather_than_falling_back():
+    target = load_recon_config(CONFIG).targets[0]
+    ctx = build_context({"env": "nonprod", "use_case": "us1", "upstream_mode": "own"})
+    with pytest.raises(Exception, match="upstream_mode"):
+        target.resolve_target(ctx)
+
+
+def test_sandbox_results_never_pollute_the_shared_evidence_base():
+    """Writes stay prefixed whatever the read mode, so a sandbox parity run
+    cannot count toward cutover. That is why cutover_readiness needs no
+    is_sandbox filter - the rows are simply not in the shared schema."""
+    dev = build_context({
+        "env": "nonprod", "use_case": "us1",
+        "schema_prefix": "jsmith_", "upstream_mode": "sandbox",
+    })
+    shared = build_context({"env": "nonprod", "use_case": "us1"})
+    assert dev.recon_table("parity_run") == "edp_ops_nonprod.jsmith_recon.parity_run"
+    assert shared.recon_table("parity_run") == "edp_ops_nonprod.recon.parity_run"

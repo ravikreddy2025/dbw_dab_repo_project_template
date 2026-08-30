@@ -13,10 +13,22 @@ variables:
     default: edp
   schema_prefix:
     description: >-
-      Per-developer schema prefix. Applies to the TARGET side of a comparison, so
-      a sandbox run checks the developer own tables. The legacy source_ref in the
-      config is absolute and unaffected.
+      Per-developer schema prefix. In THIS bundle it governs where results are
+      WRITTEN (a sandbox run writes jsmith_recon, never the shared evidence base)
+      - not what is read. What is read is decided by upstream_mode below. The
+      legacy source_ref in the config is absolute and unaffected by either.
     default: ""
+
+  upstream_mode:
+    description: >-
+      WHOSE tables to compare: "shared" (the pipeline output) or "sandbox" (the
+      developer own output). Identical in every shared environment, because
+      schema_prefix is empty there - it only means something in a sandbox, where
+      the two users want opposite things. QA authoring a config wants shared;
+      a developer checking their port wants sandbox and overrides it per run.
+      Never default this to "sandbox": a developer who forgets would compare
+      shared tables and get a PASS about code they did not write.
+    default: shared
 
   max_retries:
     description: >-

@@ -54,6 +54,12 @@ resources:
           default: ${var.etl_window_hours}
         - name: legacy_secret_scope
           default: ${var.legacy_secret_scope}
+        # WHOSE tables to compare. "shared" is correct in every shared
+        # environment and for QA authoring a config in a sandbox. A developer
+        # checking their own port overrides it per run:
+        #   databricks bundle run recon_us3 -t dev --params upstream_mode=sandbox
+        - name: upstream_mode
+          default: ${var.upstream_mode}
 
       tasks:
         - task_key: reconcile

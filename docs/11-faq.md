@@ -55,11 +55,48 @@ would run overnight, cost money and confuse everyone. Trigger it yourself:
 databricks bundle run <job_key> --target dev
 ```
 
+### Why are schemas and tables prefixed, and not just jobs?
+
+Because without it the sandbox is not a sandbox. Jobs collide on *names*; tables
+collide on *state*. If ten developers all wrote `edp_curated_nonprod.us1.orders`,
+one broken transform would corrupt what everyone else reads, and nobody could say
+whose run produced the current contents.
+
+But the prefix applies to **writes only**. Upstream reads resolve to the shared
+schema, because a prefixed read would hit an empty sandbox schema and silently
+produce nothing. See [03 §4a](03-developer-guide.md#reading-shared-data).
+
+### Do I have to copy upstream data into my sandbox to test?
+
+No, and you should not. `ctx.upstream(...)` reads the shared schema directly:
+
+```python
+source = ctx.upstream("landing", "kfk_orders")   # edp_landing_nonprod.us1
+target = ctx.table("curated", "orders")          # edp_curated_nonprod.jsmith_us1
+```
+
+Read shared, write your own. If you want to bound the cost, `ctx.sample()` applies
+`dev_sample_rows` in a sandbox and is a no-op in shared environments.
+
+If you genuinely need a large *writable* copy — testing a MERGE or a backfill — use
+`SHALLOW CLONE`, which moves no data:
+
+```sql
+CREATE TABLE edp_curated_nonprod.jsmith_us1.orders
+SHALLOW CLONE edp_curated_nonprod.us1.orders;
+```
+
+### Can I accidentally overwrite shared nonprod data?
+
+No. Developers hold `SELECT` on shared schemas and `CREATE SCHEMA` on the catalog —
+they own the sandbox schema they create, and only the run-as service principal can
+write the shared ones. A typo gives you a permission error, not a corrupted table.
+
 ### Can I run a job against the shared nonprod data from my sandbox?
 
-You can read it — `edp_landing_nonprod.us1` is readable by `edp-developers`. Just be aware
-that `ctx.table("landing", "x")` in your sandbox resolves to `jaya_us1`, so reading
-shared data means naming it explicitly. Do not write to shared schemas from a sandbox.
+Yes — that is the default. `ctx.upstream("landing", "x")` resolves to the shared
+`edp_landing_nonprod.us1` even inside your sandbox. You do not need to name it
+explicitly, and you could not write to it if you tried.
 
 ### How do I test against a realistic data volume?
 
