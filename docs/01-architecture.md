@@ -74,7 +74,7 @@ isolation benefit.
 
 ---
 
-## 2. Seven bundles
+## 2. Eight bundles
 
 ```mermaid
 flowchart TB
@@ -86,8 +86,11 @@ flowchart TB
     U4["us4"]
     U5["us5"]
 
-    DC["libs/dab_common<br/>config, audit, quality, recon"]
+    RC["recon (SHARED, QA-owned)<br/>parity for all five use cases"]
+
+    DC["libs/dab_common<br/>config, audit, quality"]
     EL["libs/edp_landing<br/>registry, kafka, oracle"]
+    ER["libs/edp_recon<br/>parity framework"]
 
     P ==>|"must deploy first"| L
     P ==> U1
@@ -100,6 +103,9 @@ flowchart TB
     DC -.->|"built into every bundle dist/"| L
     DC -.-> U1
     EL -.-> L
+    ER -.-> RC
+    U1 -.->|"checked by"| RC
+    U2 -.-> RC
 ```
 
 | Bundle | Why it is its own bundle |
@@ -107,6 +113,7 @@ flowchart TB
 | `_platform` | Shared infrastructure with a different change cadence and a different owner |
 | `landing` | Horizontal capability serving every use case, including future ones |
 | `us1`–`us5` | A use case is the natural release unit and the natural ownership boundary |
+| `recon` | Different owner (QA), different identity (reads all, writes only `ops.recon`), different lifespan (deleted at decommission) |
 
 ### Why a use case is one bundle, not two
 
@@ -164,8 +171,14 @@ If landing does become one, split it: the framework already lives in `libs/`, so
 
 | Wheel | Contents | Depended on by |
 |---|---|---|
-| [`dab_common`](../libs/dab_common) | `config`, `audit`, `quality`, `recon` | **every** bundle |
-| [`edp_landing`](../libs/edp_landing) | `registry`, `kafka`, `oracle` | landing (and any use case reading the registry) |
+| [`dab_common`](../libs/dab_common) | `config`, `audit`, `quality` | **every** bundle |
+| [`edp_landing`](../libs/edp_landing) | `registry`, `kafka`, `oracle` | the landing bundle only |
+| [`edp_recon`](../libs/edp_recon) | `model`, `gate` | the recon bundle only. **Deleted at decommission.** |
+
+Each bundle embeds only the wheels it depends on. Installing `edp_recon` into a
+use-case bundle would be the same coupling mistake in miniature: a QA change to the
+parity framework would rebuild and redeploy production ETL. The pipeline templates
+take a `sharedLibs` parameter for exactly this reason.
 
 They are wheels rather than shared notebooks for one reason: **they can be unit
 tested**. Both test suites run in PR validation on an agent with no cluster, no
@@ -177,12 +190,13 @@ predicate construction is pure.
 
 ### How a wheel reaches a job
 
-DABs requires library paths inside the bundle root, so both shared wheels are
-**built into each bundle's `dist/`**:
+DABs requires library paths inside the bundle root, so a bundle's wheels are
+**built into its own `dist/`**:
 
 ```
 libs/dab_common  ──build──▶  bundles/us1/dist/dab_common-0.4.0-py3-none-any.whl
-libs/edp_landing ──build──▶  bundles/us1/dist/edp_landing-0.4.0-py3-none-any.whl
+libs/dab_common  ──build──▶  bundles/recon/dist/dab_common-0.4.0-py3-none-any.whl
+libs/edp_recon   ──build──▶  bundles/recon/dist/edp_recon-0.4.0-py3-none-any.whl
 ```
 
 Done by [`build-wheels.yml`](../.azure-pipelines/templates/steps/build-wheels.yml)
@@ -274,15 +288,30 @@ zone is visible in the tree, so "ported" cannot quietly become permanent.
 
 Full model, and the exit criteria: [14 — Porting guide](14-porting-guide.md).
 
-### `ops.recon` — the parity evidence base
+### `bundles/recon` — the parity evidence base, owned by QA
 
-Every use case has a `conf/reconciliation.yml` declaring what parity means for it,
-and a `<uc>_reconcile` job that measures both platforms and writes the comparison
-to `edp_ops_<env>.recon`.
+A **separate bundle**, not a folder inside each use case. One generic notebook, one
+config and one job per use case, writing to `edp_ops_<env>.recon`.
 
 For a lift and shift the client's real question is not "did it deploy?" but "does
-Databricks produce the same numbers?". These tables are the answer, and
+Databricks produce the same numbers?". Those tables are the answer, and
 `cutover_readiness` turns go-live from a judgement call into a query.
+
+It is separate because it differs from the ETL on all three axes that matter:
+
+| | Use-case bundle | Recon bundle |
+|---|---|---|
+| Owner | dev team | **QA** |
+| Writes | curated + datamart data | **only** `ops.recon` |
+| Reads | its own layers | **every** data catalog |
+| Lifespan | permanent | deleted at decommission |
+
+The practical consequence: a QA tolerance change deploys through `cd-recon` and
+**never redeploys a production ETL job** — and at decommission the whole thing is
+removed in one PR that touches no use-case bundle at all.
+
+It also means a use case **cannot write its own exam results**: only the recon
+service principal has `MODIFY` on `ops.recon`.
 
 Full model: [13 — Migration and cutover](13-migration-and-cutover.md).
 

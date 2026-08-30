@@ -100,7 +100,7 @@ flowchart TB
 
 ---
 
-## The seven bundles
+## The eight bundles
 
 | Bundle | Owns | Deploys | Owner |
 |---|---|---|---|
@@ -111,10 +111,15 @@ flowchart TB
 | [`us3`](../bundles/us3) | curated + datamart for us3 (Kafka) | independent | us3 team |
 | [`us4`](../bundles/us4) | curated + datamart for us4 (Kafka) | independent | us4 team |
 | [`us5`](../bundles/us5) | curated + datamart for us5 (Kafka — **unconfirmed**) | independent | us5 team |
+| [`recon`](../bundles/recon) | Cloudera parity for **all** use cases | independent | **QA** |
 
-Plus two shared wheels: [`libs/dab_common`](../libs/dab_common) (config, audit,
-quality, recon — used by everything) and
-[`libs/edp_landing`](../libs/edp_landing) (the landing framework).
+Plus three shared wheels: [`libs/dab_common`](../libs/dab_common) (config, audit,
+quality — used by everything), [`libs/edp_landing`](../libs/edp_landing) (the
+landing framework) and [`libs/edp_recon`](../libs/edp_recon) (the parity framework,
+deleted at decommission).
+
+**Recon is a separate bundle, owned by QA.** A tolerance change must never
+redeploy production ETL — see [13 §1](13-migration-and-cutover.md#1-why-reconciliation-is-its-own-bundle).
 
 ---
 
@@ -124,9 +129,9 @@ quality, recon — used by everything) and
 bundles/
   _platform/   catalogs, schemas, volumes, secret scopes, ops DDL
   landing/     SHARED - conf/<use_case>/sources.yml, one job per use case
-  us1/ .. us5/ curated + datamart + reconciliation, per use case
-    conf/reconciliation.yml     what parity means for this use case
-    resources/                  curated.job.yml, datamart.job.yml, recon.job.yml
+  recon/       SHARED, QA-owned - conf/<use_case>.yml, one job per use case
+  us1/ .. us5/ curated + datamart, per use case
+    resources/                  curated.job.yml, datamart.job.yml
     src/ported/                 Cloudera code, lifted as-is  <- migration zone
     src/<uc>_module/            refactored, unit-tested
     src/jobs/                   thin entry points
@@ -134,7 +139,8 @@ bundles/
     src/ddl/                    layer contracts (reference)
     tests/
 libs/
-  dab_common/  config, audit, quality, recon        <- every bundle depends on this
+  dab_common/  config, audit, quality               <- every bundle depends on this
+  edp_recon/   parity framework                     <- recon bundle only
   edp_landing/ registry, kafka, oracle              <- the landing framework
 .azure-pipelines/  ci-pr-validation + one cd-* per bundle
 scripts/dev/       everyday developer commands (PowerShell)
@@ -166,9 +172,10 @@ docs/              you are here
 5. **The gate is on the Azure DevOps Environment, not in the YAML.** A developer
    cannot remove an approval by editing a file in a PR.
 
-6. **Parity is evidence, not opinion.** Every use case reconciles against Cloudera
-   and writes the result to `edp_ops_<env>.recon`. Cutover is a query, not a
-   meeting.
+6. **Parity is evidence, not opinion, and QA owns it.** Reconciliation is its own
+   bundle with its own pipeline and its own least-privilege identity, so a
+   validation change never redeploys ETL and the whole thing is deleted in one PR
+   at decommission.
 
 ---
 

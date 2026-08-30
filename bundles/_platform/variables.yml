@@ -20,6 +20,12 @@ variables:
       Application ID of the RUN-AS service principal - the identity jobs execute
       under. Distinct from the DEPLOY service principal used by the pipeline,
       which needs deploy rights but no data access. See docs/06.
+  recon_sp:
+    description: >-
+      Application ID of the RECON service principal. Reads every data catalog and
+      writes ONLY ops.recon - it can see both sides of a comparison but cannot
+      change either. Distinct from the ETL run-as SP, which is the opposite shape.
+      This grant disappears with the recon bundle at decommission.
   reader_group:
     description: Group granted read access across this environment.
   writer_group:

@@ -28,8 +28,9 @@ trigger:
   paths:
     include:
       - bundles/us2/*
-      # A shared-wheel change must redeploy every bundle that embeds it.
-      - libs/*
+      # Only the shared wheel this bundle actually embeds. A change to
+      # libs/edp_landing or libs/edp_recon must not redeploy this ETL.
+      - libs/dab_common/*
       - .azure-pipelines/*
     exclude:
       - docs/*

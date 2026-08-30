@@ -46,9 +46,8 @@ pwsh ./scripts/dev/Deploy-Sandbox.ps1 -Bundle us2
 
 ```
 Databricks CLI: Databricks CLI v0.240.0
-Building shared wheels -> bundles\us2\dist
+Building dab_common -> bundles\us2\dist
     dab_common-0.4.0-py3-none-any.whl
-    edp_landing-0.4.0-py3-none-any.whl
 Validating bundles\us2 against target 'dev'...
 Deploying to your sandbox...
 
@@ -61,7 +60,15 @@ Resources:
   Jobs:
     us2_curated:    Name: [dev jaya] us2_curated
     us2_datamart:   Name: [dev jaya] us2_datamart
-    us2_reconcile:  Name: [dev jaya] us2_reconcile
+```
+
+Two jobs, not three. Reconciliation against Cloudera is **not** in her bundle - it
+belongs to QA, in `bundles/recon`. She can still run it against her own sandbox
+tables when she wants to check a port:
+
+```bash
+pwsh ./scripts/dev/Deploy-Sandbox.ps1 -Bundle recon
+databricks bundle run recon_us2 --target dev
 ```
 
 Twenty minutes in and she has her own isolated copy of us2. Her jobs are prefixed
@@ -397,8 +404,9 @@ under two hours.
 
 ## Week 6 — us2 cuts over
 
-us2 has been running in parallel with Cloudera for a month. Priya checks the
-evidence:
+us2 has been running in parallel with Cloudera for a month. **Sam** checks the
+evidence - reconciliation is QA's, and he has `CAN_MANAGE_RUN` on the recon jobs in
+prod, so he can re-check on demand without any deploy rights:
 
 ```sql
 SELECT * FROM edp_ops_prod.recon.cutover_readiness WHERE use_case = 'us2';
@@ -409,10 +417,15 @@ use_case  env   total_runs  clean_runs  last_run_at          last_run_clean
 us2       prod  28          28          2026-10-04 08:03:52  true
 ```
 
-28 consecutive clean runs in prod, on top of 14 in preprod. One tolerance is open —
-the `amount_sum` float-vs-decimal difference — justified in
-[`conf/reconciliation.yml`](../bundles/us2/conf/reconciliation.yml) and signed off
-by Sam and the client.
+28 consecutive clean runs in prod, on top of 14 in preprod, and zero skipped. One
+tolerance is open — the `amount_sum` float-vs-decimal difference — justified in
+[`bundles/recon/conf/us2.yml`](../bundles/recon/conf/us2.yml) and signed off by Sam
+and the client.
+
+When Sam widened that tolerance three weeks earlier, the PR triggered `cd-recon`
+and **nothing else**. The us2 curated and datamart jobs were not rebuilt, not
+redeployed and not restarted. A validation change should never be able to touch
+production ETL, and here it structurally cannot.
 
 The window included a month-end close. Consumers are identified and repointed.
 Rollback has been rehearsed, not just documented.
@@ -420,9 +433,10 @@ Rollback has been rehearsed, not just documented.
 us2 cuts over. Cloudera goes **read-only, not off** — and `recon_enabled` stays
 `"true"`, because the daily comparison is still worth having.
 
-Six weeks later, after a full business cycle, a final PR sets
-`recon_enabled: "false"` for us2 in prod and drops the legacy extract. That is the
-last commit of the us2 migration, and it is a reviewed change rather than drift.
+Six weeks later, after a full business cycle, a final PR deletes
+`bundles/recon/conf/us2.yml` and `bundles/recon/resources/recon_us2.job.yml`. The
+config test fails if you remove one and not the other. That PR runs `cd-recon`
+alone - the last commit of the us2 migration, and it touches no ETL at all.
 
 Full gate: [13 — Migration and cutover](13-migration-and-cutover.md).
 
@@ -442,6 +456,8 @@ Full gate: [13 — Migration and cutover](13-migration-and-cutover.md).
 | The preprod bug fixed permanently | The fix was a commit on the release branch |
 | The fix not lost next month | The mandatory back-merge |
 | The 02:00 failure diagnosed in one query | Every job writes to `ops.audit.job_run` |
+| A QA tolerance change not redeploying prod ETL | Recon is its own bundle with its own pipeline |
+| A use case unable to write its own exam results | Only the recon SP has MODIFY on `ops.recon` |
 | It never recurring | The hotfix closed the guardrail, not just the symptom |
 | Cutover being a decision, not a leap | 28 clean parity runs in a table anyone can query |
 
@@ -459,11 +475,11 @@ You cannot deploy without a workspace, but everything else runs now:
 ```bash
 python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements-dev.txt
-pip install -e libs/dab_common -e libs/edp_landing
-pip install -e bundles/landing -e bundles/us1 -e bundles/us2
+pip install -e libs/dab_common -e libs/edp_landing -e libs/edp_recon
+pip install -e bundles/landing -e bundles/recon -e bundles/us1 -e bundles/us2
 
 pytest -q
-python scripts/ci/validate_bundle_yaml.py bundles/_platform bundles/landing bundles/us1
+python scripts/ci/validate_bundle_yaml.py bundles/_platform bundles/landing bundles/recon bundles/us1
 python scripts/ci/check_bundle_references.py
 ```
 

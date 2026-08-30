@@ -26,6 +26,10 @@ resources:
           privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
         - principal: ${var.reader_group}
           privileges: [USE_SCHEMA, SELECT]
+        # Read-only. Reconciliation must be able to see what the ETL produced
+        # without any ability to change it.
+        - principal: ${var.recon_sp}
+          privileges: [USE_SCHEMA, SELECT]
 
     curated_us2:
       name: us2
@@ -39,6 +43,10 @@ resources:
         - principal: ${var.owner_us2}
           privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
         - principal: ${var.reader_group}
+          privileges: [USE_SCHEMA, SELECT]
+        # Read-only. Reconciliation must be able to see what the ETL produced
+        # without any ability to change it.
+        - principal: ${var.recon_sp}
           privileges: [USE_SCHEMA, SELECT]
 
     curated_us3:
@@ -54,6 +62,10 @@ resources:
           privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
         - principal: ${var.reader_group}
           privileges: [USE_SCHEMA, SELECT]
+        # Read-only. Reconciliation must be able to see what the ETL produced
+        # without any ability to change it.
+        - principal: ${var.recon_sp}
+          privileges: [USE_SCHEMA, SELECT]
 
     curated_us4:
       name: us4
@@ -68,6 +80,10 @@ resources:
           privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
         - principal: ${var.reader_group}
           privileges: [USE_SCHEMA, SELECT]
+        # Read-only. Reconciliation must be able to see what the ETL produced
+        # without any ability to change it.
+        - principal: ${var.recon_sp}
+          privileges: [USE_SCHEMA, SELECT]
 
     curated_us5:
       name: us5
@@ -81,4 +97,8 @@ resources:
         - principal: ${var.owner_us5}
           privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
         - principal: ${var.reader_group}
+          privileges: [USE_SCHEMA, SELECT]
+        # Read-only. Reconciliation must be able to see what the ETL produced
+        # without any ability to change it.
+        - principal: ${var.recon_sp}
           privileges: [USE_SCHEMA, SELECT]

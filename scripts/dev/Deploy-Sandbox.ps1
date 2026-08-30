@@ -40,7 +40,7 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('_platform', 'landing', 'us1', 'us2', 'us3', 'us4', 'us5')]
+    [ValidateSet('_platform', 'landing', 'recon', 'us1', 'us2', 'us3', 'us4', 'us5')]
     [string] $Bundle,
 
     [string] $Run,

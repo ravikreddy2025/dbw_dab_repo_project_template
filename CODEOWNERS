@@ -12,6 +12,8 @@
 # -- shared code: changes here affect EVERY use case --------------------------
 /libs/dab_common/                       @edp-platform-leads
 /libs/edp_landing/                      @edp-platform-leads @edp-landing-team
+# The parity framework is QA's. Leads co-review because it reads every catalog.
+/libs/edp_recon/                        @edp-qa @edp-platform-leads
 /bundles/_platform/                     @edp-platform-leads
 /.azure-pipelines/                      @edp-platform-leads @edp-devops
 /templates/                             @edp-platform-leads
@@ -39,11 +41,15 @@
 /bundles/us4/                           @edp-us4-team @edp-platform-leads
 /bundles/us5/                           @edp-us5-team @edp-platform-leads
 
-# -- reconciliation config is the cutover evidence ----------------------------
-# Loosening a tolerance changes what "migrated correctly" means, so a lead and QA
-# both review it.
-/bundles/us1/conf/reconciliation.yml    @edp-us1-team @edp-platform-leads @edp-qa
-/bundles/us2/conf/reconciliation.yml    @edp-us2-team @edp-platform-leads @edp-qa
-/bundles/us3/conf/reconciliation.yml    @edp-us3-team @edp-platform-leads @edp-qa
-/bundles/us4/conf/reconciliation.yml    @edp-us4-team @edp-platform-leads @edp-qa
-/bundles/us5/conf/reconciliation.yml    @edp-us5-team @edp-platform-leads @edp-qa
+# -- reconciliation: OWNED BY QA, not by the use-case teams -------------------
+# Recon lives in its own bundle so a QA change never redeploys production ETL.
+# The whole bundle is QA's; each use case co-reviews its OWN parity definition,
+# because they know which tables matter - but QA drives it and signs it off.
+# Loosening a tolerance changes what "migrated correctly" means, so leads are on
+# every config too.
+/bundles/recon/                         @edp-qa @edp-platform-leads
+/bundles/recon/conf/us1.yml             @edp-qa @edp-platform-leads @edp-us1-team
+/bundles/recon/conf/us2.yml             @edp-qa @edp-platform-leads @edp-us2-team
+/bundles/recon/conf/us3.yml             @edp-qa @edp-platform-leads @edp-us3-team
+/bundles/recon/conf/us4.yml             @edp-qa @edp-platform-leads @edp-us4-team
+/bundles/recon/conf/us5.yml             @edp-qa @edp-platform-leads @edp-us5-team

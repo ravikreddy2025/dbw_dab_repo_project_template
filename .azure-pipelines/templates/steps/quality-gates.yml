@@ -4,6 +4,9 @@
 parameters:
   - name: bundlePath
     type: string
+  - name: sharedLibs
+    type: string
+    default: "dab_common"
 
 steps:
   - script: |
@@ -13,8 +16,11 @@ steps:
 
   - script: |
       set -euo pipefail
-      pip install -e libs/dab_common -e libs/edp_landing
-      # The _platform bundle is YAML + SQL only - it has no wheel to install.
+      for lib in ${{ parameters.sharedLibs }}; do
+        pip install -e "libs/$lib"
+      done
+      # Bundles without a wheel of their own (_platform, recon) have no
+      # pyproject.toml - there is nothing to install.
       if [ -f "${{ parameters.bundlePath }}/pyproject.toml" ]; then
         pip install -e "${{ parameters.bundlePath }}"
       fi
@@ -22,19 +28,25 @@ steps:
 
   - script: |
       set -euo pipefail
-      # The shared libraries are tested on EVERY bundle build, because every
-      # bundle embeds them. A dab_common regression must not reach a use case.
-      TEST_PATHS="libs/dab_common/tests libs/edp_landing/tests"
+      # The shared libraries this bundle depends on are tested on EVERY build of
+      # it, because it embeds them. A dab_common regression must not reach a use
+      # case, and an edp_recon regression must not reach the cutover evidence.
+      TEST_PATHS=""
+      COV_ARGS=""
+      for lib in ${{ parameters.sharedLibs }}; do
+        TEST_PATHS="$TEST_PATHS libs/$lib/tests"
+        COV_ARGS="$COV_ARGS --cov=$lib"
+      done
       if [ -d "${{ parameters.bundlePath }}/tests" ]; then
         TEST_PATHS="$TEST_PATHS ${{ parameters.bundlePath }}/tests"
       fi
+      echo "testing:$TEST_PATHS"
       # -m "not integration" skips the Spark-backed tests: the agent has no
       # cluster and no Java. Those run on a developer machine before the PR.
       pytest $TEST_PATHS \
         -m "not integration" \
         --junitxml=$(Build.ArtifactStagingDirectory)/test-results.xml \
-        --cov=dab_common --cov=edp_landing \
-        --cov-report=xml:$(Build.ArtifactStagingDirectory)/coverage.xml
+        $COV_ARGS --cov-report=xml:$(Build.ArtifactStagingDirectory)/coverage.xml
     displayName: "Unit tests (pytest)"
 
   - task: PublishTestResults@2

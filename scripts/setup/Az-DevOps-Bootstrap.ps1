@@ -15,7 +15,7 @@
       Environments      dbx-nonprod, dbx-preprod (approval: leads),
                         dbx-prod (approval: client reps)
       Variable groups   edp-nonprod, edp-preprod, edp-prod
-      Pipelines         ci-pr-validation + one cd-* per bundle (8 total)
+      Pipelines         ci-pr-validation + one cd-* per bundle (9 total)
       Branch policies   on main and release/*: build validation, 2 reviewers,
                         no self-approval, reset votes on push, linked work items
 
@@ -152,6 +152,7 @@ $pipelines = @(
     @{ Name = 'ci-pr-validation'; Yaml = '.azure-pipelines/ci-pr-validation.yml' }
     @{ Name = 'cd-platform';      Yaml = '.azure-pipelines/cd-platform.yml' }
     @{ Name = 'cd-landing';       Yaml = '.azure-pipelines/cd-landing.yml' }
+    @{ Name = 'cd-recon';         Yaml = '.azure-pipelines/cd-recon.yml' }
     @{ Name = 'cd-us1';           Yaml = '.azure-pipelines/cd-us1.yml' }
     @{ Name = 'cd-us2';           Yaml = '.azure-pipelines/cd-us2.yml' }
     @{ Name = 'cd-us3';           Yaml = '.azure-pipelines/cd-us3.yml' }

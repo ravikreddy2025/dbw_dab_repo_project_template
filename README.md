@@ -3,7 +3,7 @@
 A **working reference implementation** for a 10-person team lifting and shifting from
 Cloudera onto Azure Databricks: Databricks Asset Bundles for deployment, Azure DevOps
 for source control and release gating, three environments, four catalogs per
-environment, five use cases, seven bundles.
+environment, five use cases, eight bundles.
 
 Everything here runs. Tests pass, pipelines are complete, the audit scripts are real.
 The only placeholders are workspace URLs, service principal GUIDs and subscription
@@ -129,7 +129,7 @@ workspace URL or a PAT was committed by accident.
 **Two things to confirm before you start:**
 - `bundles/landing/conf/us5/sources.yml` assumes **Kafka** for us5 and says so in a
   TODO banner. Change it if that is wrong.
-- The `source_ref` values in each `conf/reconciliation.yml` are placeholders — they
+- The `source_ref` values in each `bundles/recon/conf/<use_case>.yml` are placeholders — they
   need to point at however you land the Cloudera side.
 
 ---

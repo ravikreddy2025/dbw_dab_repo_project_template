@@ -17,7 +17,7 @@
 
 # COMMAND ----------
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
@@ -92,7 +92,7 @@ print(gate)
 
 # COMMAND ----------
 
-started = datetime.now(timezone.utc)
+started = datetime.now(UTC)
 run_rows: list[dict] = []
 check_rows: list[dict] = []
 
@@ -122,7 +122,7 @@ with audited_run(spark, ctx, layer="recon"):
                     "checks_failed": 0,
                     "overall_passed": False,
                     "started_at": started,
-                    "ended_at": datetime.now(timezone.utc),
+                    "ended_at": datetime.now(UTC),
                     "notes": gate.reason,
                 }
             )
@@ -151,7 +151,7 @@ with audited_run(spark, ctx, layer="recon"):
                     "justification": check.justification,
                     "passed": ok,
                     "env": ctx.env,
-                    "evaluated_at": datetime.now(timezone.utc),
+                    "evaluated_at": datetime.now(UTC),
                 }
             )
             flag = "PASS" if ok else "FAIL"
@@ -173,7 +173,7 @@ with audited_run(spark, ctx, layer="recon"):
                 "checks_failed": len(target.checks) - passed_count,
                 "overall_passed": all_passed,
                 "started_at": started,
-                "ended_at": datetime.now(timezone.utc),
+                "ended_at": datetime.now(UTC),
                 "notes": gate.reason,
             }
         )

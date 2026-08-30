@@ -93,10 +93,10 @@ care where it came from.
 
 | Thing | Pattern | Examples |
 |---|---|---|
-| Bundle folder | `<use_case>`, plus `_platform` and `landing` | `bundles/us1`, `bundles/_platform` |
+| Bundle folder | `<use_case>`, plus `_platform`, `landing`, `recon` | `bundles/us1`, `bundles/recon` |
 | Bundle name | `edp_<folder>` | `edp_us1`, `edp_landing`, `edp_platform` |
 | Resource file | `<subject>.<type>.yml` | `curated.job.yml`, `kafka_landing_us1.pipeline.yml` |
-| Job key | `<use_case>_<layer>` | `us1_curated`, `us1_datamart`, `us1_reconcile`, `landing_us2` |
+| Job key | `<use_case>_<layer>` | `us1_curated`, `us1_datamart`, `recon_us1`, `landing_us2` |
 | Task key | verb or verb_noun | `curate`, `list_sources`, `land_one_table`, `build_dim_orders` |
 | Job cluster key | `<purpose>_<role>` | `oracle_etl` |
 | Environment key | `default` unless there is a reason | `default` |
@@ -139,7 +139,8 @@ env  use_case  catalog_prefix  schema_prefix  max_retries  run_as_sp  alert_emai
 ```
 
 Plus where relevant: `min_workers`, `max_workers`, `runtime_engine`, `photon`,
-`etl_policy_id`, `warehouse_id`, `dq_fail_on_error`, `recon_enabled`.
+`etl_policy_id`, `warehouse_id`, `dq_fail_on_error` (use-case bundles),
+`recon_enabled` and `etl_window_hours` (the recon bundle only).
 
 > `photon` is a **boolean** for declarative pipelines. `runtime_engine` is an
 > **enum** (`STANDARD` / `PHOTON`) for job clusters. Two names for one idea, kept
@@ -182,7 +183,7 @@ squash-merge, so the PR title becomes the commit on `main` — make it good.
 
 | Thing | Pattern | Examples |
 |---|---|---|
-| Pipeline | `cd-<bundle>` / `ci-<purpose>` | `cd-us1`, `cd-landing`, `ci-pr-validation` |
+| Pipeline | `cd-<bundle>` / `ci-<purpose>` | `cd-us1`, `cd-landing`, `cd-recon`, `ci-pr-validation` |
 | Environment | `dbx-<env>` | `dbx-preprod` |
 | Variable group | `edp-<env>` | `edp-preprod` |
 | Service connection | `dbx-<env>-svc-conn` | `dbx-preprod-svc-conn` |
@@ -200,6 +201,7 @@ squash-merge, so the PR title becomes the commit on `main` — make it good.
 | Landing team | `edp-landing-team` | — |
 | Deploy SP | `sp-edp-deploy-<env>` | `sp-edp-deploy-prod` |
 | Run-as SP | `sp-edp-run-<env>` | `sp-edp-run-prod` |
+| Recon SP | `sp-edp-recon-<env>` | `sp-edp-recon-prod` |
 | Secret scope | `edp-<system>` | `edp-oracle`, `edp-kafka`, `edp-legacy` |
 | Key Vault | `kv-edp-<env>` | `kv-edp-preprod` |
 | Cluster policy | `edp-<purpose>` | `edp-etl-standard` |
@@ -219,6 +221,7 @@ squash-merge, so the PR title becomes the commit on `main` — make it good.
 | `source_system` | `oracle`, `kafka` |
 | `load_strategy` | `full`, `incremental`, `cdc_stream` |
 | `status` (audit) | `RUNNING`, `SUCCESS`, `FAILED`, `SKIPPED` |
+| `status` (parity_run) | `PASSED`, `FAILED`, `SKIPPED` — SKIPPED means the ETL had not run |
 | `layer` (audit) | `landing`, `curated`, `datamart`, `recon`, `platform` |
 | `severity` (DQ) | `warn`, `error` |
 | `check_type` (recon) | `row_count`, `column_sum`, `column_hash`, `distinct_count`, `min_max` |
@@ -231,7 +234,7 @@ table of the same name collide. A test enforces it.
 **Never reuse a `source_id`** for a different object; the history would be
 uninterpretable.
 
-Enumerations are validated in code (`edp_landing.registry`, `dab_common.recon`), so
+Enumerations are validated in code (`edp_landing.registry`, `edp_recon.model`), so
 an invalid value fails at PR time rather than at 2am.
 
 ---
@@ -279,7 +282,7 @@ Staggered so each layer has its inputs. All UTC.
 | `landing_us2` (Oracle) | `0 0 2 * * ?` | 02:00 |
 | `<uc>_curated` | `0 0 4 * * ?` | 04:00 |
 | `<uc>_datamart` | `0 0 6 * * ?` | 06:00 |
-| `<uc>_reconcile` | `0 0 8 * * ?` | 08:00 |
+| `recon_<uc>` | `0 0 8 * * ?` | 08:00 |
 
 Two-hour gaps are generous on purpose — a slow night should not cascade. If you add
 a job, fit it into this order and say so in the PR.

@@ -69,7 +69,7 @@ From the log above. Include:
 - **Which bundles changed** — that determines which pipelines run
 - Any change to `conf/<use_case>/sources.yml` (new or retired sources)
 - Any change to `ops.*` DDL (the bootstrap job will apply it)
-- Any change to a `conf/reconciliation.yml`, especially a new or widened tolerance
+- Any change to a `bundles/recon/conf/<use_case>.yml`, especially a new or widened tolerance
 - Anything needing manual action: a new secret, a new cluster policy, a grant
 
 Post them where the approvers will see them before they click approve.

@@ -51,7 +51,7 @@ try {
 
     Invoke-Check 'Bundle structure' {
         & python scripts/ci/validate_bundle_yaml.py `
-            bundles/_platform bundles/landing `
+            bundles/_platform bundles/landing bundles/recon `
             bundles/us1 bundles/us2 bundles/us3 bundles/us4 bundles/us5
     }
 

@@ -20,6 +20,7 @@ for months.
 | Support | No | No | Read + view runs |
 | Deploy SP | `sp-edp-deploy-nonprod` | `sp-edp-deploy-preprod` | `sp-edp-deploy-prod` |
 | Run-as SP | `sp-edp-run-nonprod` | `sp-edp-run-preprod` | `sp-edp-run-prod` |
+| Recon SP | `sp-edp-recon-nonprod` | `sp-edp-recon-preprod` | `sp-edp-recon-prod` |
 
 Separate Key Vaults per environment, so a misconfigured nonprod job cannot read
 production credentials even if it asks for the right scope name.
@@ -87,6 +88,21 @@ Set by `run_as` in each production-mode target.
 
 If a job is compromised it cannot deploy code. If the pipeline is compromised it
 cannot read data. Neither can do the other's job.
+
+### Recon SP — the identity that checks the migration
+
+Set by `run_as` in the recon bundle. Deliberately the inverse of the ETL run-as SP.
+
+| Needs | Value |
+|---|---|
+| Unity Catalog | `SELECT` on **every** data schema — it reads both sides of a comparison |
+| Unity Catalog | `MODIFY` on `ops.recon` and nowhere else |
+| Secrets | `READ` on `edp-legacy`, when the source side is read over a connection |
+| **Must not have** | Write access to any data catalog, or any deploy rights |
+
+That last row is the point: **a use case cannot write its own exam results.** The
+grants are declared in the `_platform` bundle via `${var.recon_sp}` and disappear
+with the recon bundle at decommission.
 
 ### In a sandbox there is no SP at all
 

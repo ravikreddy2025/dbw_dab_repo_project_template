@@ -58,11 +58,21 @@ stages:
 
           - script: |
               set -euo pipefail
-              # A change to a shared wheel or the pipeline templates affects every
-              # bundle, so it validates all of them.
-              if grep -qE '^(libs/|\.azure-pipelines/|pyproject\.toml)' changed.txt; then
-                BUNDLES="_platform landing us1 us2 us3 us4 us5"
-                echo "shared code changed - validating ALL bundles"
+              # Scope follows the dependency graph, not "libs/ changed".
+              #   dab_common      embedded by every bundle      -> validate all
+              #   edp_landing     embedded by landing only      -> validate landing
+              #   edp_recon       embedded by recon only        -> validate recon
+              # Without this split, a QA change to the parity framework would
+              # revalidate - and on merge, redeploy - production ETL.
+              if grep -qE '^(libs/dab_common/|\.azure-pipelines/|pyproject\.toml)' changed.txt; then
+                BUNDLES="_platform landing recon us1 us2 us3 us4 us5"
+                echo "universal shared code changed - validating ALL bundles"
+              elif grep -qE '^libs/edp_landing/' changed.txt; then
+                BUNDLES="landing"
+                echo "landing framework changed - validating landing only"
+              elif grep -qE '^libs/edp_recon/' changed.txt; then
+                BUNDLES="recon"
+                echo "parity framework changed - validating recon only"
               else
                 BUNDLES=$(grep -oE '^bundles/[^/]+' changed.txt \
                           | sed 's|bundles/||' | sort -u | tr '\n' ' ')
@@ -78,12 +88,19 @@ stages:
 
           - script: |
               set -euo pipefail
-              pip install -e libs/dab_common -e libs/edp_landing
+              pip install -e libs/dab_common -e libs/edp_landing -e libs/edp_recon
               for b in $(cat bundles.txt); do
                 [ -f "bundles/$b/pyproject.toml" ] && pip install -e "bundles/$b" || true
               done
-              # The shared libraries are always tested: every bundle embeds them.
-              TEST_PATHS="libs/dab_common/tests libs/edp_landing/tests"
+              # dab_common is embedded by everything, so it is always tested. The
+              # other two are tested when their own bundle is in scope.
+              TEST_PATHS="libs/dab_common/tests"
+              case " $(cat bundles.txt) " in
+                *" landing "*) TEST_PATHS="$TEST_PATHS libs/edp_landing/tests" ;;
+              esac
+              case " $(cat bundles.txt) " in
+                *" recon "*) TEST_PATHS="$TEST_PATHS libs/edp_recon/tests" ;;
+              esac
               for b in $(cat bundles.txt); do
                 [ -d "bundles/$b/tests" ] && TEST_PATHS="$TEST_PATHS bundles/$b/tests"
               done

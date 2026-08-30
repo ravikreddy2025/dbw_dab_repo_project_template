@@ -175,6 +175,43 @@ def check_no_real_credentials() -> None:
             err(f"{rel(db)}: contains what looks like a Databricks personal access token")
 
 
+# ---------------------------------------------------------------------------
+# 8. A pipeline must not rebuild on a shared library its bundle does not embed.
+#    This is the check that keeps the recon/ETL separation real: without it,
+#    someone widening a path filter back to `libs/*` would silently make a QA
+#    parity change redeploy production ETL again, and nothing would complain.
+# ---------------------------------------------------------------------------
+def check_trigger_scope() -> None:
+    for pipeline in sorted(PIPELINES.glob("cd-*.yml")):
+        text = pipeline.read_text(encoding="utf-8")
+        try:
+            doc = yaml.safe_load(text) or {}
+        except yaml.YAMLError:
+            continue
+        includes = ((doc.get("trigger") or {}).get("paths") or {}).get("include") or []
+        triggered_libs = {
+            p.split("/")[1] for p in includes if p.startswith("libs/") and "/" in p[5:]
+        }
+        if "*" in triggered_libs or any(p == "libs/*" for p in includes):
+            err(
+                f"{rel(pipeline)}: blanket `libs/*` trigger - name the specific "
+                "libraries this bundle embeds, or a change to any framework "
+                "redeploys this one"
+            )
+            continue
+
+        # sharedLibs in the build stage is the declaration of what it embeds.
+        m = re.search(r'sharedLibs:\s*"([^"]+)"', text)
+        embedded = set(m.group(1).split()) if m else {"dab_common"}
+
+        for extra in sorted(triggered_libs - embedded):
+            err(
+                f"{rel(pipeline)}: triggers on libs/{extra} but does not embed it "
+                f"(embeds: {sorted(embedded)}). A change there would rebuild and "
+                "redeploy this bundle for no reason."
+            )
+
+
 def main() -> int:
     for check in (
         check_pipeline_templates,
@@ -184,6 +221,7 @@ def main() -> int:
         check_cli_version_pin,
         check_doc_links,
         check_no_real_credentials,
+        check_trigger_scope,
     ):
         check()
 

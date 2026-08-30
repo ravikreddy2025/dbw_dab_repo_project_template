@@ -66,8 +66,13 @@ resources:
       grants:
         - principal: edp-platform-leads
           privileges: [ALL_PRIVILEGES]
-        - principal: ${var.writer_group}
+        # The recon service principal is the ONLY identity that writes parity
+        # results. Not the ETL run-as SP: a use case must not be able to write
+        # its own exam results.
+        - principal: ${var.recon_sp}
           privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+        - principal: ${var.writer_group}
+          privileges: [USE_SCHEMA, SELECT]
         - principal: ${var.reader_group}
           privileges: [USE_SCHEMA, SELECT]
         # QA reads parity results in every environment to sign off a cutover.

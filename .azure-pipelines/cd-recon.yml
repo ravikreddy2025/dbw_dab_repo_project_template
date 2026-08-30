@@ -1,23 +1,26 @@
 # =============================================================================
-# CD - LANDING BUNDLE (shared by every use case)
+# CD - RECON BUNDLE (Cloudera parity).  OWNED BY QA.
 # -----------------------------------------------------------------------------
-# The SHARED landing bundle: Kafka and Oracle into edp_landing_<env>.<use_case>.
+# SEPARATE FROM THE USE-CASE PIPELINES ON PURPOSE.
 #
-# One pipeline for all five use cases, because they share one bundle. The
-# per-use-case boundary is enforced by config folders with their own CODEOWNERS
-# and one job per use case, not by separate pipelines.
+# A QA change to a tolerance, a check, or a whole use case parity definition
+# deploys through THIS pipeline and only this one. It never rebuilds or
+# redeploys a production ETL job. Before recon was extracted into its own
+# bundle, editing a tolerance triggered cd-us1 and redeployed the us1 curated
+# and datamart jobs - which is not something a validation change should be able
+# to do.
 #
-# Depends on: cd-platform.
+# The reverse also holds: a use-case team shipping an ETL change does not
+# redeploy the checks that are validating them.
 #
-# Promotion model:
-#   merge to main       -> Build -> NonProd            (no gate)
-#   push to release/*   -> Build -> PreProd (gate: leads) -> Prod (gate: client)
+# Note the trigger paths: libs/edp_recon only. A change to libs/edp_landing or a
+# use-case bundle does NOT rebuild recon.
 #
-# All stages of ONE RUN use the same commit and the same wheels, so what prod
-# gets is byte-identical to what QA approved in preprod.
+# AT DECOMMISSION this file, bundles/recon and libs/edp_recon are deleted in one
+# PR, and that PR touches no production ETL at all. See docs/13.
 # =============================================================================
 
-name: cd-landing-$(Date:yyyyMMdd)$(Rev:.r)
+name: cd-recon-$(Date:yyyyMMdd)$(Rev:.r)
 
 trigger:
   branches:
@@ -26,16 +29,14 @@ trigger:
       - release/*
   paths:
     include:
-      - bundles/landing/*
-      # Only the shared wheels this bundle embeds - not libs/edp_recon.
+      - bundles/recon/*
+      - libs/edp_recon/*
       - libs/dab_common/*
-      - libs/edp_landing/*
       - .azure-pipelines/*
     exclude:
       - docs/*
       - "**/*.md"
 
-# PR builds are handled by ci-pr-validation.yml, not here.
 pr: none
 
 variables:
@@ -45,51 +46,55 @@ stages:
 
   - template: templates/jobs/build-stage.yml
     parameters:
-      bundlePath: bundles/landing
+      bundlePath: bundles/recon
       serviceConnection: dbx-nonprod-svc-conn
       variableGroup: edp-nonprod
-      sharedLibs: "dab_common edp_landing"
+      sharedLibs: "dab_common edp_recon"
 
   # -- main -> nonprod, automatic ---------------------------------------------
+  # Nonprod is where QA proves a parity CONFIG is right before it starts gating a
+  # release. The smoke run reconciles us1, which exercises config loading, the
+  # ETL gate and both result tables.
   - template: templates/jobs/deploy-stage.yml
     parameters:
       stageName: DeployNonProd
-      displayName: "Deploy to NonProd (dev workspace)"
+      displayName: "Deploy recon to NonProd"
       environment: dbx-nonprod
       serviceConnection: dbx-nonprod-svc-conn
       target: nonprod
-      bundlePath: bundles/landing
+      bundlePath: bundles/recon
       variableGroup: edp-nonprod
       dependsOn: [Build]
       condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
-      runAfterDeploy: landing_seed_source_registry
+      runAfterDeploy: recon_us1
 
   # -- release/* -> preprod, gated on leads -----------------------------------
   - template: templates/jobs/deploy-stage.yml
     parameters:
       stageName: DeployPreProd
-      displayName: "Deploy to PreProd (approval: leads)"
+      displayName: "Deploy recon to PreProd (approval: leads)"
       environment: dbx-preprod
       serviceConnection: dbx-preprod-svc-conn
       target: preprod
-      bundlePath: bundles/landing
+      bundlePath: bundles/recon
       variableGroup: edp-preprod
       dependsOn: [Build]
       condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/heads/release/'))
-      runAfterDeploy: landing_seed_source_registry
+      runAfterDeploy: recon_us1
 
   # -- release/* -> prod, gated on the client ---------------------------------
+  # Recon runs in PRODUCTION during the parallel run - that is where parity is
+  # proven at real volume - so it goes through the same client gate as anything
+  # else that lands in prod.
   - template: templates/jobs/deploy-stage.yml
     parameters:
       stageName: DeployProd
-      displayName: "Deploy to Prod (approval: client)"
+      displayName: "Deploy recon to Prod (approval: client)"
       environment: dbx-prod
       serviceConnection: dbx-prod-svc-conn
       target: prod
-      bundlePath: bundles/landing
+      bundlePath: bundles/recon
       variableGroup: edp-prod
-      # Depends on PreProd, not Build: prod can only ever deploy something that
-      # already reached preprod and passed its gate.
       dependsOn: [DeployPreProd]
       condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/heads/release/'))
-      runAfterDeploy: landing_seed_source_registry
+      runAfterDeploy: recon_us1

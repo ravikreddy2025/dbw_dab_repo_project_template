@@ -10,6 +10,9 @@ parameters:
     type: string          # nonprod connection - used only for `bundle validate`
   - name: variableGroup
     type: string
+  - name: sharedLibs
+    type: string
+    default: "dab_common"   # which libs/ wheels this bundle depends on
 
 stages:
   - stage: Build
@@ -31,10 +34,12 @@ stages:
           - template: ../steps/quality-gates.yml
             parameters:
               bundlePath: ${{ parameters.bundlePath }}
+              sharedLibs: ${{ parameters.sharedLibs }}
 
           - template: ../steps/build-wheels.yml
             parameters:
               bundlePath: ${{ parameters.bundlePath }}
+              sharedLibs: ${{ parameters.sharedLibs }}
 
           # Validate against the nonprod workspace. This resolves lookups and
           # variable references for real, catching a broken bundle before any
