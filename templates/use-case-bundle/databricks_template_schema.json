@@ -1,0 +1,40 @@
+{
+  "welcome_message": "\nEDP use-case bundle scaffold\n----------------------------\nCreates a new use-case bundle with the standard four targets, the standard\nvariable set, curated + datamart + reconciliation jobs, and the two-zone\nsrc/ layout (ported/ and <use_case>_module/).\n\nRun from the repo root:\n\n    databricks bundle init ./templates/use-case-bundle --output-dir bundles\n\nThen see docs/04-bundle-authoring.md for what to do next.\n",
+  "properties": {
+    "use_case": {
+      "type": "string",
+      "description": "Use case name in lower snake_case (e.g. us6). Becomes the folder name, the bundle name suffix, the Python package name AND the schema name in all three data catalogs.",
+      "pattern": "^[a-z][a-z0-9_]{1,30}$",
+      "pattern_match_failure_message": "Must be lower snake_case, 2-31 characters, starting with a letter. It becomes a Unity Catalog schema name, so no hyphens or dots."
+    },
+    "owning_team": {
+      "type": "string",
+      "description": "Azure AD group owning this use case. Used in permissions and CODEOWNERS.",
+      "default": "edp-platform-leads"
+    },
+    "domain": {
+      "type": "string",
+      "description": "Primary business entity, singular lower case (e.g. orders, claims). Names the sample tables.",
+      "default": "records"
+    },
+    "landing_source": {
+      "type": "string",
+      "description": "Where this use case lands from. Adds the matching config to the SHARED landing bundle.",
+      "enum": [
+        "kafka",
+        "oracle"
+      ],
+      "default": "kafka"
+    },
+    "compute_style": {
+      "type": "string",
+      "description": "Compute for the curated job.",
+      "enum": [
+        "serverless",
+        "job_cluster"
+      ],
+      "default": "serverless"
+    }
+  },
+  "success_message": "\nCreated bundles/{{.use_case}}.\n\nNext, IN THIS ORDER:\n  1. Add the schema to the _platform bundle - three files:\n       bundles/_platform/resources/schemas_landing.yml\n       bundles/_platform/resources/schemas_curated.yml\n       bundles/_platform/resources/schemas_datamart.yml\n     plus an owner_{{.use_case}} variable in bundles/_platform/variables.yml\n     and volumes in bundles/_platform/resources/volumes.yml.\n     WITHOUT THIS THE BUNDLE HAS NOWHERE TO WRITE.\n  2. Add bundles/landing/conf/{{.use_case}}/sources.yml and a\n     bundles/landing/resources/landing_{{.use_case}}.job.yml.\n  3. Add /bundles/{{.use_case}}/ and the landing conf folder to CODEOWNERS.\n  4. Copy .azure-pipelines/cd-us1.yml to cd-{{.use_case}}.yml and change the\n     three module-specific lines (name, bundlePath, runAfterDeploy).\n  5. Register the pipeline, or re-run scripts/setup/Az-DevOps-Bootstrap.ps1.\n  6. Fill in conf/reconciliation.yml - a use case with no parity definition\n     cannot be signed off for cutover.\n  7. Deploy your sandbox:\n       pwsh ./scripts/dev/Deploy-Sandbox.ps1 -Bundle {{.use_case}}\n\nThe cross-reference audit fails until step 4 is done - that is deliberate, it\nis what stops a bundle existing with no way to deploy it.\n"
+}

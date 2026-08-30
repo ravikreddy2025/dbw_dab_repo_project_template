@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "edp_recon"
+version = "0.4.0"
+description = "Cloudera-to-Databricks parity framework. Owned by QA. Deleted at decommission."
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["edp_recon*"]

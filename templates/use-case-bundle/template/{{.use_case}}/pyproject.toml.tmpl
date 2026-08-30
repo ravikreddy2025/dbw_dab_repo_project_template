@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "edp_{{.use_case}}"
+version = "0.1.0"
+description = "EDP use case {{.use_case}}: curated and datamart layers for {{.domain}}."
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["{{.use_case}}_module*"]

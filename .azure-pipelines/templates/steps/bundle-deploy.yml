@@ -1,0 +1,92 @@
+# Validate and deploy one bundle to one target.
+#
+# AUTHENTICATION - Workload Identity Federation (OIDC), no secrets anywhere.
+# The AzureCLI@2 task signs in using an ARM service connection configured with
+# federated credentials. The Databricks CLI's unified credential chain then
+# detects the active Azure CLI session and uses it. There is no token to store,
+# rotate, or leak. The service connection name is the only thing that changes
+# between environments.
+#
+# If your org has not enabled WIF yet, see the commented SP-secret fallback at
+# the bottom of this file and docs/05-cicd-pipelines.md#auth-fallback.
+
+parameters:
+  - name: serviceConnection
+    type: string
+  - name: target
+    type: string
+  - name: bundlePath
+    type: string
+  - name: runAfterDeploy
+    type: string
+    default: ""          # optional job key to run as a smoke test
+
+steps:
+  # The wheels built once in the Build stage, reused verbatim. Preprod and prod
+  # install the same binary QA signed off on - they never rebuild it.
+  - download: current
+    artifact: "$(WHEEL_ARTIFACT_NAME)"
+    displayName: "Download wheels built in the Build stage"
+
+  - script: |
+      set -euo pipefail
+      mkdir -p "${{ parameters.bundlePath }}/dist"
+      cp -v "$(Pipeline.Workspace)/$(WHEEL_ARTIFACT_NAME)"/*.whl "${{ parameters.bundlePath }}/dist/"
+    displayName: "Stage wheels into the bundle"
+
+  - task: AzureCLI@2
+    displayName: "Validate bundle for ${{ parameters.target }}"
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      workingDirectory: ${{ parameters.bundlePath }}
+      inlineScript: |
+        set -euo pipefail
+        # `validate` resolves every ${var.*} and every lookup against the REAL
+        # target workspace, so a renamed cluster policy or a missing warehouse
+        # fails here rather than half way through a deploy.
+        databricks bundle validate --target ${{ parameters.target }}
+
+  - task: AzureCLI@2
+    displayName: "Deploy bundle to ${{ parameters.target }}"
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      workingDirectory: ${{ parameters.bundlePath }}
+      inlineScript: |
+        set -euo pipefail
+        databricks bundle deploy --target ${{ parameters.target }}
+        echo "--- deployed resources ---"
+        databricks bundle summary --target ${{ parameters.target }}
+
+  - ${{ if ne(parameters.runAfterDeploy, '') }}:
+      - task: AzureCLI@2
+        displayName: "Smoke run: ${{ parameters.runAfterDeploy }}"
+        inputs:
+          azureSubscription: ${{ parameters.serviceConnection }}
+          scriptType: bash
+          scriptLocation: inlineScript
+          workingDirectory: ${{ parameters.bundlePath }}
+          inlineScript: |
+            set -euo pipefail
+            # Blocks until the run finishes and fails the stage on a failed run,
+            # so a deploy that produces a broken job never reaches the next gate.
+            databricks bundle run ${{ parameters.runAfterDeploy }} \
+              --target ${{ parameters.target }}
+
+# -----------------------------------------------------------------------------
+# FALLBACK: service-principal client ID + secret, if WIF is not available.
+# Replace each AzureCLI@2 task above with a plain script step and this env block:
+#
+#   - script: databricks bundle deploy --target ${{ parameters.target }}
+#     workingDirectory: ${{ parameters.bundlePath }}
+#     env:
+#       DATABRICKS_HOST:          $(DATABRICKS_HOST)
+#       DATABRICKS_CLIENT_ID:     $(DATABRICKS_CLIENT_ID)
+#       DATABRICKS_CLIENT_SECRET: $(DATABRICKS_CLIENT_SECRET)   # from Key Vault
+#
+# Store the secret in a variable group backed by Azure Key Vault, never as a
+# plain pipeline variable, and rotate it on a schedule. See docs/05.
+# -----------------------------------------------------------------------------

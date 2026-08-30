@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "edp_landing_bundle"
+version = "0.4.0"
+description = "Landing bundle glue: source-registry seeding. The framework itself is libs/edp_landing."
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["landing_module*"]

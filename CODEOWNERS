@@ -1,0 +1,49 @@
+# Azure Repos does not consume CODEOWNERS natively the way GitHub does. This file
+# is the single source of truth that scripts/setup/Az-DevOps-Bootstrap.ps1
+# translates into "Automatically included reviewers" branch policies.
+#   Repos > Branches > main > Branch policies > Automatically included reviewers
+#
+# PATH                                  OWNING GROUP
+# -----------------------------------------------------------------------------
+
+# Anything not matched below needs a platform lead.
+*                                       @edp-platform-leads
+
+# -- shared code: changes here affect EVERY use case --------------------------
+/libs/dab_common/                       @edp-platform-leads
+/libs/edp_landing/                      @edp-platform-leads @edp-landing-team
+/bundles/_platform/                     @edp-platform-leads
+/.azure-pipelines/                      @edp-platform-leads @edp-devops
+/templates/                             @edp-platform-leads
+/scripts/setup/                         @edp-platform-leads @edp-devops
+/scripts/ci/                            @edp-platform-leads
+/docs/                                  @edp-platform-leads
+
+# -- the shared landing bundle ------------------------------------------------
+# The bundle itself is owned by the landing team, but each use case owns its own
+# source registry. That is what keeps a shared bundle from becoming a shared
+# bottleneck: onboarding a us3 topic needs a us3 reviewer, not a landing one.
+/bundles/landing/                       @edp-landing-team @edp-platform-leads
+/bundles/landing/conf/us1/              @edp-us1-team @edp-landing-team
+/bundles/landing/conf/us2/              @edp-us2-team @edp-landing-team
+/bundles/landing/conf/us3/              @edp-us3-team @edp-landing-team
+/bundles/landing/conf/us4/              @edp-us4-team @edp-landing-team
+/bundles/landing/conf/us5/              @edp-us5-team @edp-landing-team
+
+# -- use-case bundles ---------------------------------------------------------
+# Owned by their team, but leads still approve: the branch policy requires two
+# approvals, one of which must be a lead.
+/bundles/us1/                           @edp-us1-team @edp-platform-leads
+/bundles/us2/                           @edp-us2-team @edp-platform-leads
+/bundles/us3/                           @edp-us3-team @edp-platform-leads
+/bundles/us4/                           @edp-us4-team @edp-platform-leads
+/bundles/us5/                           @edp-us5-team @edp-platform-leads
+
+# -- reconciliation config is the cutover evidence ----------------------------
+# Loosening a tolerance changes what "migrated correctly" means, so a lead and QA
+# both review it.
+/bundles/us1/conf/reconciliation.yml    @edp-us1-team @edp-platform-leads @edp-qa
+/bundles/us2/conf/reconciliation.yml    @edp-us2-team @edp-platform-leads @edp-qa
+/bundles/us3/conf/reconciliation.yml    @edp-us3-team @edp-platform-leads @edp-qa
+/bundles/us4/conf/reconciliation.yml    @edp-us4-team @edp-platform-leads @edp-qa
+/bundles/us5/conf/reconciliation.yml    @edp-us5-team @edp-platform-leads @edp-qa

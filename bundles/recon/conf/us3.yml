@@ -1,0 +1,65 @@
+# =============================================================================
+# US3 PARITY DEFINITION - what "the migration worked" means for us3
+# =============================================================================
+# OWNED BY QA. The us3 team is a required reviewer (see CODEOWNERS) because they
+# know which tables matter, but QA drives this file and signs it off - and a
+# change here deploys through cd-recon, never through cd-us3. A validation
+# change must never redeploy production ETL.
+#
+# source_ref is the LEGACY side. It is deliberately opaque: use whatever gets
+# Cloudera output somewhere queryable - an exported extract landed in
+# ops.recon, a federated query, or a view over a mounted file.
+#
+# tolerance is FRACTIONAL and defaults to 0.0 (exact). A non-zero tolerance
+# REQUIRES a justification; that is enforced in edp_recon.model, not by review,
+# because a review convention is the thing that erodes under deadline pressure.
+#
+# Validated at PR time by tests/test_recon_configs.py.
+# =============================================================================
+
+use_case: us3
+
+targets:
+  - name: events_curated
+    layer: curated
+    target_table: events
+    # PLACEHOLDER - point at however you land the Cloudera side for us3.
+    source_ref: edp_ops_nonprod.recon.legacy_us3_events
+    key_columns: [events_id]
+    owner_email: edp-us3-team@example.com
+    checks:
+      - name: row_count
+        check_type: row_count
+
+      - name: events_id_distinct
+        check_type: distinct_count
+        column: events_id
+
+      # A column hash catches value-level drift a row count cannot: same number
+      # of rows, different contents. This is the check that finds the real
+      # migration defects.
+      - name: events_id_hash
+        check_type: column_hash
+        column: events_id
+
+  - name: events_datamart
+    layer: datamart
+    target_table: fct_events
+    source_ref: edp_ops_nonprod.recon.legacy_us3_fct_events   # PLACEHOLDER
+    key_columns: [events_id]
+    owner_email: edp-us3-team@example.com
+    checks:
+      - name: row_count
+        check_type: row_count
+
+      - name: amount_sum
+        check_type: column_sum
+        column: amount
+        # EXAMPLE of a justified tolerance. Delete it if your extracts are
+        # snapshot-consistent - most should be, and exact is always better.
+        tolerance: 0.0001
+        justification: >-
+          Cloudera stores amount as DOUBLE and Databricks as DECIMAL(18,2);
+          accumulated float representation differs in the 5th decimal place
+          across ~2M rows. Verified against a hand-reconciled sample on
+          2026-08-14 by QA with the us3 team.

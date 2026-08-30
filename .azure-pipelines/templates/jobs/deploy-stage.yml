@@ -1,0 +1,68 @@
+# One reusable deployment job. Every environment stage in every cd-*.yml pipeline
+# is an instance of this.
+#
+# `deployment:` (not `job:`) is what binds the run to an Azure DevOps
+# Environment, and the Environment is where the APPROVAL GATE lives. The approval
+# is configured in the Azure DevOps UI (Pipelines > Environments > <name> >
+# Approvals and checks), NOT in this YAML - so a developer cannot remove a gate
+# by editing a file in a PR. That separation is the whole point.
+#
+# Environments and their approvers are created by scripts/setup/Az-DevOps-Bootstrap.ps1.
+
+parameters:
+  - name: stageName
+    type: string
+  - name: displayName
+    type: string
+  - name: environment
+    type: string          # Azure DevOps Environment - carries the approval gate
+  - name: serviceConnection
+    type: string
+  - name: target
+    type: string          # bundle target
+  - name: bundlePath
+    type: string
+  - name: condition
+    type: string
+    default: succeeded()
+  - name: dependsOn
+    type: object
+    default: []
+  - name: variableGroup
+    type: string
+  - name: runAfterDeploy
+    type: string
+    default: ""
+
+stages:
+  - stage: ${{ parameters.stageName }}
+    displayName: ${{ parameters.displayName }}
+    dependsOn: ${{ parameters.dependsOn }}
+    condition: ${{ parameters.condition }}
+    variables:
+      - group: ${{ parameters.variableGroup }}
+      - template: ../vars/common.yml
+    jobs:
+      - deployment: deploy
+        displayName: "Deploy to ${{ parameters.target }}"
+        environment: ${{ parameters.environment }}
+        pool:
+          vmImage: ubuntu-latest
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # Deployment jobs do not check out by default. Every stage of one
+                # pipeline run checks out the SAME commit, which is what makes
+                # promotion immutable: prod deploys the exact source preprod did.
+                - checkout: self
+                  fetchDepth: 1
+
+                - template: ../steps/setup-tooling.yml
+
+                - template: ../steps/bundle-deploy.yml
+                  parameters:
+                    serviceConnection: ${{ parameters.serviceConnection }}
+                    target: ${{ parameters.target }}
+                    bundlePath: ${{ parameters.bundlePath }}
+                    runAfterDeploy: ${{ parameters.runAfterDeploy }}

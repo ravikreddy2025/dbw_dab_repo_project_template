@@ -1,0 +1,75 @@
+# THE FOUR CATALOGS, one per layer, per environment.
+#
+#   edp_landing_<env>    raw landed data      (Kafka via us1/us3/us4, Oracle via us2)
+#   edp_curated_<env>    cleansed / conformed
+#   edp_datamart_<env>   business-facing marts
+#   edp_ops_<env>        audit, config, logs, recon
+#
+# The <env> suffix is REQUIRED, not cosmetic: one Unity Catalog metastore serves
+# all three workspaces, so catalog names must be unique metastore-wide. Dropping
+# it would collide the moment preprod and prod share a metastore.
+#
+# Catalogs are shared ACROSS use cases; the per-use-case boundary is the schema.
+#
+# NOTE: creating a catalog needs CREATE CATALOG on the metastore. If your cloud
+# platform team provisions catalogs with Terraform instead, delete this file -
+# the schemas in the sibling files will still bind to the pre-existing catalogs.
+
+resources:
+  catalogs:
+
+    landing:
+      name: ${var.catalog_prefix}_landing_${var.env}
+      comment: "EDP ${var.env} landing layer. Written only by the shared landing bundle."
+      grants:
+        - principal: edp-platform-leads
+          privileges: [ALL_PRIVILEGES]
+        - principal: ${var.writer_group}
+          privileges: [USE_CATALOG, CREATE_SCHEMA]
+        - principal: ${var.reader_group}
+          privileges: [USE_CATALOG]
+
+    curated:
+      name: ${var.catalog_prefix}_curated_${var.env}
+      comment: "EDP ${var.env} curated layer. One schema per use case."
+      grants:
+        - principal: edp-platform-leads
+          privileges: [ALL_PRIVILEGES]
+        # CREATE_SCHEMA is what lets a developer's sandbox schema be created at
+        # runtime by ensure_schema(). In preprod and prod writer_group is the
+        # leads group, so nobody but the platform team can add a schema.
+        - principal: ${var.writer_group}
+          privileges: [USE_CATALOG, CREATE_SCHEMA]
+        - principal: ${var.reader_group}
+          privileges: [USE_CATALOG]
+
+    datamart:
+      name: ${var.catalog_prefix}_datamart_${var.env}
+      comment: "EDP ${var.env} datamart layer. Business-facing marts, one schema per use case."
+      grants:
+        - principal: edp-platform-leads
+          privileges: [ALL_PRIVILEGES]
+        - principal: ${var.writer_group}
+          privileges: [USE_CATALOG, CREATE_SCHEMA]
+        - principal: ${var.reader_group}
+          privileges: [USE_CATALOG]
+        # Business consumers reach the marts and nothing else. Table-level
+        # grants are applied by each use case after its tables exist.
+        - principal: edp-business-analysts
+          privileges: [USE_CATALOG]
+
+    ops:
+      name: ${var.catalog_prefix}_ops_${var.env}
+      comment: >-
+        EDP ${var.env} operations: audit, config, logs, recon. Kept out of the
+        data catalogs so support can be granted operational visibility with no
+        access to data.
+      grants:
+        - principal: edp-platform-leads
+          privileges: [ALL_PRIVILEGES]
+        - principal: ${var.writer_group}
+          privileges: [USE_CATALOG, CREATE_SCHEMA]
+        - principal: ${var.reader_group}
+          privileges: [USE_CATALOG]
+        - principal: edp-support
+          privileges: [USE_CATALOG]

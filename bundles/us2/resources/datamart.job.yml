@@ -1,0 +1,80 @@
+# us2: curated -> datamart.
+#
+# SQL tasks on a DBSQL warehouse (resolved by NAME per target) plus one notebook
+# task on serverless for the things SQL cannot do: audit rows and grants.
+
+resources:
+  jobs:
+    us2_datamart:
+      name: us2_datamart
+      description: "Build us2 marts in edp_datamart_<env>.us2 from the curated layer."
+
+      tags:
+        use_case: us2
+        layer: datamart
+        managed_by: databricks_bundle
+        environment: ${var.env}
+
+      schedule:
+        quartz_cron_expression: "0 0 6 * * ?"        # 06:00 UTC, after curated
+        timezone_id: UTC
+        pause_status: UNPAUSED
+
+      max_concurrent_runs: 1
+
+      email_notifications:
+        on_failure:
+          - ${var.alert_email}
+
+      parameters:
+        - name: env
+          default: ${var.env}
+        - name: use_case
+          default: us2
+        - name: catalog_prefix
+          default: ${var.catalog_prefix}
+        - name: schema_prefix
+          default: ${var.schema_prefix}
+        - name: bundle_target
+          default: ${bundle.target}
+
+      tasks:
+        - task_key: build_dim_customers
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../src/sql/dim_customers.sql
+            # Parameters are BOUND as :named markers inside the file. String
+            # concatenation into SQL is never used here.
+            parameters:
+              catalog: ${var.catalog_prefix}_datamart_${var.env}
+              curated_catalog: ${var.catalog_prefix}_curated_${var.env}
+              schema: ${var.schema_prefix}us2
+
+        - task_key: build_fct_customers
+          depends_on:
+            - task_key: build_dim_customers
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../src/sql/fct_customers.sql
+            parameters:
+              catalog: ${var.catalog_prefix}_datamart_${var.env}
+              curated_catalog: ${var.catalog_prefix}_curated_${var.env}
+              schema: ${var.schema_prefix}us2
+
+        - task_key: publish_marts
+          depends_on:
+            - task_key: build_fct_customers
+          notebook_task:
+            notebook_path: ../src/jobs/publish_marts.py
+          environment_key: default
+          max_retries: ${var.max_retries}
+
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ./dist/dab_common-*.whl
+              - ./dist/edp_us2-*.whl

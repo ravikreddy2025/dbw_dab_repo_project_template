@@ -1,0 +1,94 @@
+# =============================================================================
+# CD - US3 (curated + datamart)
+# -----------------------------------------------------------------------------
+# Curated + datamart for us3. The two layers ship together because a use case
+# is the natural release unit.
+#
+# Depends on: cd-platform (catalogs, schemas, ops tables) and cd-landing (data).
+#
+# The smoke run is the CURATED job: it exercises the read from landing, the
+# transformation and the data quality gate in one go. If that passes, the deploy
+# is sound.
+#
+# Promotion model:
+#   merge to main       -> Build -> NonProd            (no gate)
+#   push to release/*   -> Build -> PreProd (gate: leads) -> Prod (gate: client)
+#
+# All stages of ONE RUN use the same commit and the same wheels, so what prod
+# gets is byte-identical to what QA approved in preprod.
+# =============================================================================
+
+name: cd-us3-$(Date:yyyyMMdd)$(Rev:.r)
+
+trigger:
+  branches:
+    include:
+      - main
+      - release/*
+  paths:
+    include:
+      - bundles/us3/*
+      # A shared-wheel change must redeploy every bundle that embeds it.
+      - libs/*
+      - .azure-pipelines/*
+    exclude:
+      - docs/*
+      - "**/*.md"
+
+# PR builds are handled by ci-pr-validation.yml, not here.
+pr: none
+
+variables:
+  - template: templates/vars/common.yml
+
+stages:
+
+  - template: templates/jobs/build-stage.yml
+    parameters:
+      bundlePath: bundles/us3
+      serviceConnection: dbx-nonprod-svc-conn
+      variableGroup: edp-nonprod
+
+  # -- main -> nonprod, automatic ---------------------------------------------
+  - template: templates/jobs/deploy-stage.yml
+    parameters:
+      stageName: DeployNonProd
+      displayName: "Deploy to NonProd (dev workspace)"
+      environment: dbx-nonprod
+      serviceConnection: dbx-nonprod-svc-conn
+      target: nonprod
+      bundlePath: bundles/us3
+      variableGroup: edp-nonprod
+      dependsOn: [Build]
+      condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+      runAfterDeploy: us3_curated
+
+  # -- release/* -> preprod, gated on leads -----------------------------------
+  - template: templates/jobs/deploy-stage.yml
+    parameters:
+      stageName: DeployPreProd
+      displayName: "Deploy to PreProd (approval: leads)"
+      environment: dbx-preprod
+      serviceConnection: dbx-preprod-svc-conn
+      target: preprod
+      bundlePath: bundles/us3
+      variableGroup: edp-preprod
+      dependsOn: [Build]
+      condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/heads/release/'))
+      runAfterDeploy: us3_curated
+
+  # -- release/* -> prod, gated on the client ---------------------------------
+  - template: templates/jobs/deploy-stage.yml
+    parameters:
+      stageName: DeployProd
+      displayName: "Deploy to Prod (approval: client)"
+      environment: dbx-prod
+      serviceConnection: dbx-prod-svc-conn
+      target: prod
+      bundlePath: bundles/us3
+      variableGroup: edp-prod
+      # Depends on PreProd, not Build: prod can only ever deploy something that
+      # already reached preprod and passed its gate.
+      dependsOn: [DeployPreProd]
+      condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/heads/release/'))
+      runAfterDeploy: us3_curated

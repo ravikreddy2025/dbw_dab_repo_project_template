@@ -1,0 +1,20 @@
+"""Business logic for {{.use_case}}.
+
+Convention that makes this testable: functions take `spark` and a
+`RuntimeContext` and never read the environment for themselves. Pure
+transformations take and return DataFrames with no I/O at all.
+"""
+
+from __future__ import annotations
+
+from dab_common.config import RuntimeContext
+
+
+def run(spark, ctx: RuntimeContext) -> None:
+    """Entry point called by src/jobs/main.py.
+
+    TODO: replace with real work, or with a call into src/ported/.
+    """
+    source = ctx.table("landing", "{{.domain}}")
+    target = ctx.table("curated", "{{.domain}}")
+    print(f"TODO: implement {{.use_case}} logic: {source} -> {target}")

@@ -1,0 +1,118 @@
+# =============================================================================
+# CI - PULL REQUEST VALIDATION
+# -----------------------------------------------------------------------------
+# The Build Validation policy on `main` and `release/*` points here. It must pass
+# before a PR can complete. It NEVER deploys - a PR branch is untrusted code, and
+# it does not get a service connection.
+#
+# It detects which bundles the PR actually touched and validates only those, so a
+# one-line change to us4 does not spend four minutes testing us1. A change under
+# libs/ touches the shared wheels, so it validates everything.
+#
+# Wire it up:  Repos > Branches > main > Branch policies > Build Validation
+#              (see scripts/setup/Az-DevOps-Bootstrap.ps1)
+# =============================================================================
+
+name: ci-pr-$(Date:yyyyMMdd)$(Rev:.r)
+
+# No CI trigger: this runs on pull requests only. Merges to main are handled by
+# the cd-* pipelines.
+trigger: none
+
+pr:
+  branches:
+    include:
+      - main
+      - release/*
+  paths:
+    exclude:
+      - docs/*
+      - "**/*.md"
+
+variables:
+  - template: templates/vars/common.yml
+
+stages:
+  - stage: Validate
+    displayName: "Validate the pull request"
+    jobs:
+      - job: validate
+        displayName: "Lint, test and validate changed bundles"
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          # Full history is needed to diff against the PR target branch.
+          - checkout: self
+            fetchDepth: 0
+            persistCredentials: true
+
+          - template: templates/steps/setup-tooling.yml
+
+          - script: |
+              set -euo pipefail
+              TARGET="origin/$(System.PullRequest.TargetBranchName)"
+              git fetch origin "$(System.PullRequest.TargetBranchName)" --depth=50
+              echo "--- files changed against $TARGET ---"
+              git diff --name-only "$TARGET"...HEAD | tee changed.txt
+            displayName: "Determine what this PR changed"
+
+          - script: |
+              set -euo pipefail
+              # A change to a shared wheel or the pipeline templates affects every
+              # bundle, so it validates all of them.
+              if grep -qE '^(libs/|\.azure-pipelines/|pyproject\.toml)' changed.txt; then
+                BUNDLES="_platform landing us1 us2 us3 us4 us5"
+                echo "shared code changed - validating ALL bundles"
+              else
+                BUNDLES=$(grep -oE '^bundles/[^/]+' changed.txt \
+                          | sed 's|bundles/||' | sort -u | tr '\n' ' ')
+                echo "changed bundles: ${BUNDLES:-<none>}"
+              fi
+              echo "${BUNDLES}" > bundles.txt
+            displayName: "Resolve the set of bundles to validate"
+
+          - script: |
+              set -euo pipefail
+              ruff check .
+            displayName: "Lint (ruff)"
+
+          - script: |
+              set -euo pipefail
+              pip install -e libs/dab_common -e libs/edp_landing
+              for b in $(cat bundles.txt); do
+                [ -f "bundles/$b/pyproject.toml" ] && pip install -e "bundles/$b" || true
+              done
+              # The shared libraries are always tested: every bundle embeds them.
+              TEST_PATHS="libs/dab_common/tests libs/edp_landing/tests"
+              for b in $(cat bundles.txt); do
+                [ -d "bundles/$b/tests" ] && TEST_PATHS="$TEST_PATHS bundles/$b/tests"
+              done
+              echo "testing: $TEST_PATHS"
+              pytest $TEST_PATHS -m "not integration" \
+                --junitxml=$(Build.ArtifactStagingDirectory)/test-results.xml
+            displayName: "Unit tests for the changed bundles"
+
+          - task: PublishTestResults@2
+            displayName: "Publish test results"
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFiles: "$(Build.ArtifactStagingDirectory)/test-results.xml"
+              testRunTitle: "PR validation"
+
+          - script: |
+              set -euo pipefail
+              python scripts/ci/check_bundle_references.py
+            displayName: "Cross-reference audit (paths, variables, templates)"
+
+          # Bundle syntax is validated WITHOUT a workspace connection. A PR from
+          # a feature branch must not be able to reach a real workspace, so this
+          # checks structure and variable resolution offline. Full
+          # `bundle validate` against nonprod happens in the Build stage of the
+          # cd-* pipeline, after the merge.
+          - script: |
+              set -euo pipefail
+              for b in $(cat bundles.txt); do
+                echo "--- bundles/$b ---"
+                python scripts/ci/validate_bundle_yaml.py "bundles/$b"
+              done
+            displayName: "Validate bundle YAML structure"

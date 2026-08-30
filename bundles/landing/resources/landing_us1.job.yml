@@ -1,0 +1,77 @@
+# US1 landing: Kafka -> edp_landing_<env>.us1
+#
+# One job per use case. us1 and us3 share the framework and this file shape, but
+# they schedule, run and fail independently - which is what stops a shared
+# landing bundle from coupling use cases at runtime.
+
+resources:
+  jobs:
+    landing_us1:
+      name: landing_us1
+      description: "Land US1 Kafka topics into the us1 schema of the landing catalog."
+
+      tags:
+        use_case: us1
+        layer: landing
+        source_system: kafka
+        managed_by: databricks_bundle
+        environment: ${var.env}
+
+      # Forced to PAUSED in the dev target by mode:development, so a sandbox
+      # never fires on a timer no matter what is written here.
+      schedule:
+        quartz_cron_expression: "0 0/30 * * * ?"     # every 30 minutes
+        timezone_id: UTC
+        pause_status: UNPAUSED
+
+      # One run at a time: overlapping micro-batch drains on the same checkpoint
+      # would contend.
+      max_concurrent_runs: 1
+
+      email_notifications:
+        on_failure:
+          - ${var.alert_email}
+      health:
+        rules:
+          - metric: RUN_DURATION_SECONDS
+            op: GREATER_THAN
+            value: 3600
+
+      # The five base parameters every job in this repo passes. Declared at JOB
+      # level so tasks - including any generated inside a for_each - inherit them.
+      parameters:
+        - name: env
+          default: ${var.env}
+        - name: use_case
+          default: us1
+        - name: catalog_prefix
+          default: ${var.catalog_prefix}
+        - name: schema_prefix
+          default: ${var.schema_prefix}
+        - name: bundle_target
+          default: ${bundle.target}
+        - name: kafka_secret_scope
+          default: ${var.kafka_secret_scope}
+
+      tasks:
+        - task_key: land_kafka_topics
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.kafka_landing_us1.id}
+            full_refresh: false
+
+        - task_key: audit_landing
+          depends_on:
+            - task_key: land_kafka_topics
+          notebook_task:
+            notebook_path: ../src/jobs/audit_landing_run.py
+          environment_key: default
+          max_retries: ${var.max_retries}
+
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ./dist/dab_common-*.whl
+              - ./dist/edp_landing-*.whl
+              - ./dist/edp_landing_bundle-*.whl

@@ -1,0 +1,84 @@
+# DATAMART CATALOG SCHEMAS - one per use case.
+#
+# Business-facing marts (gold / semantic). Written by the owning use-case bundle.
+#
+# WHY THESE ARE DECLARED HERE AND NOT IN THE USE-CASE BUNDLES:
+# In `mode: development` DABs prefixes resource names with "[dev jsmith] ", which
+# is not a legal Unity Catalog schema name - so a use-case bundle that declared a
+# schema would break the moment a developer deployed their sandbox. Shared schemas
+# are declared once here (this bundle has no development-mode target), and
+# per-developer sandbox schemas are created at runtime by
+# dab_common.config.ensure_schema(). See docs/08-troubleshooting.md#schema-prefix.
+
+resources:
+  schemas:
+
+    datamart_us1:
+      name: us1
+      catalog_name: ${var.catalog_prefix}_datamart_${var.env}
+      comment: "datamart layer for use case us1. Managed by the edp_platform bundle."
+      grants:
+        - principal: edp-platform-leads
+          privileges: [ALL_PRIVILEGES]
+        - principal: ${var.writer_group}
+          privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+        - principal: ${var.owner_us1}
+          privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+        - principal: ${var.reader_group}
+          privileges: [USE_SCHEMA, SELECT]
+
+    datamart_us2:
+      name: us2
+      catalog_name: ${var.catalog_prefix}_datamart_${var.env}
+      comment: "datamart layer for use case us2. Managed by the edp_platform bundle."
+      grants:
+        - principal: edp-platform-leads
+          privileges: [ALL_PRIVILEGES]
+        - principal: ${var.writer_group}
+          privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+        - principal: ${var.owner_us2}
+          privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+        - principal: ${var.reader_group}
+          privileges: [USE_SCHEMA, SELECT]
+
+    datamart_us3:
+      name: us3
+      catalog_name: ${var.catalog_prefix}_datamart_${var.env}
+      comment: "datamart layer for use case us3. Managed by the edp_platform bundle."
+      grants:
+        - principal: edp-platform-leads
+          privileges: [ALL_PRIVILEGES]
+        - principal: ${var.writer_group}
+          privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+        - principal: ${var.owner_us3}
+          privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+        - principal: ${var.reader_group}
+          privileges: [USE_SCHEMA, SELECT]
+
+    datamart_us4:
+      name: us4
+      catalog_name: ${var.catalog_prefix}_datamart_${var.env}
+      comment: "datamart layer for use case us4. Managed by the edp_platform bundle."
+      grants:
+        - principal: edp-platform-leads
+          privileges: [ALL_PRIVILEGES]
+        - principal: ${var.writer_group}
+          privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+        - principal: ${var.owner_us4}
+          privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+        - principal: ${var.reader_group}
+          privileges: [USE_SCHEMA, SELECT]
+
+    datamart_us5:
+      name: us5
+      catalog_name: ${var.catalog_prefix}_datamart_${var.env}
+      comment: "datamart layer for use case us5. Managed by the edp_platform bundle."
+      grants:
+        - principal: edp-platform-leads
+          privileges: [ALL_PRIVILEGES]
+        - principal: ${var.writer_group}
+          privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+        - principal: ${var.owner_us5}
+          privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+        - principal: ${var.reader_group}
+          privileges: [USE_SCHEMA, SELECT]

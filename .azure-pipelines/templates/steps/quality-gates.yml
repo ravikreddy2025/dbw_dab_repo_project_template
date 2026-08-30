@@ -1,0 +1,45 @@
+# Lint and unit tests. Runs once, in the Build stage, before anything deploys.
+# If this is red the pipeline stops here.
+
+parameters:
+  - name: bundlePath
+    type: string
+
+steps:
+  - script: |
+      set -euo pipefail
+      ruff check .
+    displayName: "Lint (ruff)"
+
+  - script: |
+      set -euo pipefail
+      pip install -e libs/dab_common -e libs/edp_landing
+      # The _platform bundle is YAML + SQL only - it has no wheel to install.
+      if [ -f "${{ parameters.bundlePath }}/pyproject.toml" ]; then
+        pip install -e "${{ parameters.bundlePath }}"
+      fi
+    displayName: "Install packages under test"
+
+  - script: |
+      set -euo pipefail
+      # The shared libraries are tested on EVERY bundle build, because every
+      # bundle embeds them. A dab_common regression must not reach a use case.
+      TEST_PATHS="libs/dab_common/tests libs/edp_landing/tests"
+      if [ -d "${{ parameters.bundlePath }}/tests" ]; then
+        TEST_PATHS="$TEST_PATHS ${{ parameters.bundlePath }}/tests"
+      fi
+      # -m "not integration" skips the Spark-backed tests: the agent has no
+      # cluster and no Java. Those run on a developer machine before the PR.
+      pytest $TEST_PATHS \
+        -m "not integration" \
+        --junitxml=$(Build.ArtifactStagingDirectory)/test-results.xml \
+        --cov=dab_common --cov=edp_landing \
+        --cov-report=xml:$(Build.ArtifactStagingDirectory)/coverage.xml
+    displayName: "Unit tests (pytest)"
+
+  - task: PublishTestResults@2
+    displayName: "Publish test results"
+    condition: succeededOrFailed()
+    inputs:
+      testResultsFiles: "$(Build.ArtifactStagingDirectory)/test-results.xml"
+      testRunTitle: "Unit tests - ${{ parameters.bundlePath }}"

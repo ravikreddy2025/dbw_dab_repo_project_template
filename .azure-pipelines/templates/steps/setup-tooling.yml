@@ -1,0 +1,24 @@
+# Python + the Databricks CLI. Used by every stage of every pipeline.
+#
+# The CLI is a standalone binary, NOT a pip package. `pip install databricks-cli`
+# installs the deprecated v0.17 Python CLI, which has no `bundle` command at all
+# - a confusing failure that has cost teams an afternoon. See docs/08.
+
+steps:
+  - task: UsePythonVersion@0
+    displayName: "Use Python $(PYTHON_VERSION)"
+    inputs:
+      versionSpec: "$(PYTHON_VERSION)"
+
+  - script: |
+      set -euo pipefail
+      python -m pip install --upgrade pip
+      pip install -r requirements-dev.txt
+    displayName: "Install Python build + test tooling"
+
+  - script: |
+      set -euo pipefail
+      curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh \
+        | sh -s -- v$(DATABRICKS_CLI_VERSION)
+      databricks --version
+    displayName: "Install Databricks CLI v$(DATABRICKS_CLI_VERSION)"

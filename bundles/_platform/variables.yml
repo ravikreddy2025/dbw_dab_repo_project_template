@@ -1,0 +1,47 @@
+# Variable DECLARATIONS. Environment-specific values are set per target in
+# databricks.yml; use-case ownership does NOT vary by environment, so those
+# defaults are set here once.
+
+variables:
+  # -- environment ------------------------------------------------------------
+  env:
+    description: Physical environment (nonprod | preprod | prod). Forms the catalog suffix.
+  catalog_prefix:
+    description: >-
+      First segment of every catalog name. Catalogs are ${catalog_prefix}_<layer>_<env>,
+      e.g. edp_curated_preprod. The env suffix is required, not cosmetic: one Unity
+      Catalog metastore serves all three workspaces, so names must be unique
+      metastore-wide.
+    default: edp
+
+  # -- identities -------------------------------------------------------------
+  run_as_sp:
+    description: >-
+      Application ID of the RUN-AS service principal - the identity jobs execute
+      under. Distinct from the DEPLOY service principal used by the pipeline,
+      which needs deploy rights but no data access. See docs/06.
+  reader_group:
+    description: Group granted read access across this environment.
+  writer_group:
+    description: Group allowed to create and modify objects in this environment.
+  alert_email:
+    description: Destination for job failure notifications.
+
+  # -- use-case ownership (same in every environment) -------------------------
+  # Each use-case schema grants its owning team directly, so a change to us1's
+  # data cannot be made by the us4 team even in nonprod.
+  owner_us1:
+    description: Team owning use case 1.
+    default: edp-us1-team
+  owner_us2:
+    description: Team owning use case 2.
+    default: edp-us2-team
+  owner_us3:
+    description: Team owning use case 3.
+    default: edp-us3-team
+  owner_us4:
+    description: Team owning use case 4.
+    default: edp-us4-team
+  owner_us5:
+    description: Team owning use case 5.
+    default: edp-us5-team

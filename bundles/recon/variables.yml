@@ -1,0 +1,59 @@
+# Variable DECLARATIONS. Values are set per target in databricks.yml.
+#
+# Note what is NOT here: no compute sizing beyond serverless, no cluster policy,
+# no warehouse. Reconciliation is a handful of aggregate queries per table; it
+# does not need tuning, and giving it knobs would invite someone to tune it
+# instead of fixing the mismatch it found.
+
+variables:
+  env:
+    description: Physical environment (nonprod | preprod | prod). Forms the catalog suffix.
+  catalog_prefix:
+    description: First segment of every catalog name. Catalogs are <prefix>_<layer>_<env>.
+    default: edp
+  schema_prefix:
+    description: >-
+      Per-developer schema prefix. Applies to the TARGET side of a comparison, so
+      a sandbox run checks the developer own tables. The legacy source_ref in the
+      config is absolute and unaffected.
+    default: ""
+
+  max_retries:
+    description: >-
+      Task retry count. A parity MISMATCH is not an error and is never retried -
+      this only covers transient failures reading either side.
+    default: 0
+
+  recon_enabled:
+    description: >-
+      Master switch for this environment. Stays "true" through the parallel run
+      and is set false per environment only after every use case has cut over.
+      Per-use-case retirement is done by removing that job entry, not here.
+    default: "true"
+
+  etl_window_hours:
+    description: >-
+      How recently the ETL must have succeeded for a comparison to be meaningful.
+      Should exceed the ETL interval with headroom - 24 for a daily load, so a run
+      that starts late still passes the gate. Large in a sandbox, where the
+      developer ETL may legitimately be days old.
+    default: 24
+
+  run_as_sp:
+    description: >-
+      Application ID of the RECON service principal - distinct from both the
+      deploy SP and the ETL run-as SP. It reads every data catalog and writes only
+      ops.recon. Empty in the dev target, where QA runs as themselves.
+    default: ""
+
+  legacy_secret_scope:
+    description: >-
+      Secret scope holding credentials for the legacy platform, when the source
+      side is read over a connection rather than from a landed extract. Deleted
+      at decommission along with this bundle.
+    default: edp-legacy
+
+  alert_email:
+    description: >-
+      Where recon notifications go. QA, not the use-case teams: a parity finding
+      is a QA triage item first, and only becomes a dev ticket once triaged.

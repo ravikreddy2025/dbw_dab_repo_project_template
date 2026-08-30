@@ -1,0 +1,93 @@
+# =============================================================================
+# CD - LANDING BUNDLE (shared by every use case)
+# -----------------------------------------------------------------------------
+# The SHARED landing bundle: Kafka and Oracle into edp_landing_<env>.<use_case>.
+#
+# One pipeline for all five use cases, because they share one bundle. The
+# per-use-case boundary is enforced by config folders with their own CODEOWNERS
+# and one job per use case, not by separate pipelines.
+#
+# Depends on: cd-platform.
+#
+# Promotion model:
+#   merge to main       -> Build -> NonProd            (no gate)
+#   push to release/*   -> Build -> PreProd (gate: leads) -> Prod (gate: client)
+#
+# All stages of ONE RUN use the same commit and the same wheels, so what prod
+# gets is byte-identical to what QA approved in preprod.
+# =============================================================================
+
+name: cd-landing-$(Date:yyyyMMdd)$(Rev:.r)
+
+trigger:
+  branches:
+    include:
+      - main
+      - release/*
+  paths:
+    include:
+      - bundles/landing/*
+      # A shared-wheel change must redeploy every bundle that embeds it.
+      - libs/*
+      - .azure-pipelines/*
+    exclude:
+      - docs/*
+      - "**/*.md"
+
+# PR builds are handled by ci-pr-validation.yml, not here.
+pr: none
+
+variables:
+  - template: templates/vars/common.yml
+
+stages:
+
+  - template: templates/jobs/build-stage.yml
+    parameters:
+      bundlePath: bundles/landing
+      serviceConnection: dbx-nonprod-svc-conn
+      variableGroup: edp-nonprod
+
+  # -- main -> nonprod, automatic ---------------------------------------------
+  - template: templates/jobs/deploy-stage.yml
+    parameters:
+      stageName: DeployNonProd
+      displayName: "Deploy to NonProd (dev workspace)"
+      environment: dbx-nonprod
+      serviceConnection: dbx-nonprod-svc-conn
+      target: nonprod
+      bundlePath: bundles/landing
+      variableGroup: edp-nonprod
+      dependsOn: [Build]
+      condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+      runAfterDeploy: landing_seed_source_registry
+
+  # -- release/* -> preprod, gated on leads -----------------------------------
+  - template: templates/jobs/deploy-stage.yml
+    parameters:
+      stageName: DeployPreProd
+      displayName: "Deploy to PreProd (approval: leads)"
+      environment: dbx-preprod
+      serviceConnection: dbx-preprod-svc-conn
+      target: preprod
+      bundlePath: bundles/landing
+      variableGroup: edp-preprod
+      dependsOn: [Build]
+      condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/heads/release/'))
+      runAfterDeploy: landing_seed_source_registry
+
+  # -- release/* -> prod, gated on the client ---------------------------------
+  - template: templates/jobs/deploy-stage.yml
+    parameters:
+      stageName: DeployProd
+      displayName: "Deploy to Prod (approval: client)"
+      environment: dbx-prod
+      serviceConnection: dbx-prod-svc-conn
+      target: prod
+      bundlePath: bundles/landing
+      variableGroup: edp-prod
+      # Depends on PreProd, not Build: prod can only ever deploy something that
+      # already reached preprod and passed its gate.
+      dependsOn: [DeployPreProd]
+      condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/heads/release/'))
+      runAfterDeploy: landing_seed_source_registry

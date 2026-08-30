@@ -1,0 +1,109 @@
+# =============================================================================
+# EDP {{.use_case}} BUNDLE  -  curated + datamart
+# -----------------------------------------------------------------------------
+# Generated from templates/use-case-bundle. Structure matches bundles/us1, which
+# carries the full commentary - read that file to understand the targets.
+#
+# Writes to:  edp_curated_<env>.{{.use_case}}  and  edp_datamart_<env>.{{.use_case}}
+# Reads from: edp_landing_<env>.{{.use_case}}  (landed by the SHARED landing bundle)
+#
+# Owner: @{{.owning_team}}
+# Depends on: edp_platform (the schemas above MUST exist) and edp_landing
+# =============================================================================
+
+bundle:
+  name: edp_{{.use_case}}
+  databricks_cli_version: ">=0.240.0"
+
+include:
+  - variables.yml
+  - resources/*.yml
+
+artifacts:
+  {{.use_case}}_module:
+    type: whl
+    path: .
+    build: python -m build --wheel --outdir dist
+    dynamic_version: true
+
+targets:
+
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://adb-0000000000000001.1.azuredatabricks.net   # PLACEHOLDER: nonprod
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      env: nonprod                 # a sandbox lives INSIDE nonprod
+      schema_prefix: ${workspace.current_user.short_name}_
+      max_retries: 0
+      dq_fail_on_error: "true"
+      recon_enabled: "true"
+      alert_email: ${workspace.current_user.userName}
+
+  nonprod:
+    mode: production
+    workspace:
+      host: https://adb-0000000000000001.1.azuredatabricks.net   # PLACEHOLDER
+      root_path: /Workspace/Applications/${bundle.name}/${bundle.target}
+    run_as:
+      service_principal_name: ${var.run_as_sp}
+    permissions:
+      - level: CAN_MANAGE
+        group_name: edp-platform-leads
+      - level: CAN_MANAGE_RUN
+        group_name: {{.owning_team}}
+      - level: CAN_VIEW
+        group_name: edp-developers
+    variables:
+      env: nonprod
+      schema_prefix: ""
+      max_retries: 1
+      dq_fail_on_error: "true"
+      recon_enabled: "true"
+      run_as_sp: 11111111-1111-1111-1111-111111111111        # PLACEHOLDER
+      alert_email: {{.owning_team}}@example.com
+
+  preprod:
+    mode: production
+    workspace:
+      host: https://adb-0000000000000002.2.azuredatabricks.net   # PLACEHOLDER
+      root_path: /Workspace/Applications/${bundle.name}/${bundle.target}
+    run_as:
+      service_principal_name: ${var.run_as_sp}
+    permissions:
+      - level: CAN_MANAGE
+        group_name: edp-platform-leads
+      - level: CAN_VIEW
+        group_name: edp-qa
+    variables:
+      env: preprod
+      schema_prefix: ""
+      max_retries: 2
+      dq_fail_on_error: "true"
+      recon_enabled: "true"
+      run_as_sp: 22222222-2222-2222-2222-222222222222        # PLACEHOLDER
+      alert_email: edp-preprod-alerts@example.com
+
+  prod:
+    mode: production
+    workspace:
+      host: https://adb-0000000000000003.3.azuredatabricks.net   # PLACEHOLDER
+      root_path: /Workspace/Applications/${bundle.name}/${bundle.target}
+    run_as:
+      service_principal_name: ${var.run_as_sp}
+    permissions:
+      - level: CAN_MANAGE
+        group_name: edp-platform-leads
+      - level: CAN_VIEW
+        group_name: edp-support
+    variables:
+      env: prod
+      schema_prefix: ""
+      max_retries: 3
+      dq_fail_on_error: "true"
+      # Set false only after {{.use_case}} has cut over - see docs/13.
+      recon_enabled: "true"
+      run_as_sp: 33333333-3333-3333-3333-333333333333        # PLACEHOLDER
+      alert_email: edp-prod-oncall@example.com

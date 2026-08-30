@@ -1,0 +1,48 @@
+# =============================================================================
+# US5 LANDING SOURCES  -  KAFKA
+# =============================================================================
+# Onboarding a topic is a PR against THIS FILE. No new notebook, no new job, no
+# YAML change under resources/. The landing_seed_source_registry job MERGEs this
+# into ops.config.landing_source for whichever environment it runs in.
+#
+# Removing a source here sets is_active=false; it never deletes the row, so the
+# watermark and audit history survive.
+#
+# Owned by the US5 team - see CODEOWNERS. Validated at PR time by
+# bundles/landing/tests/test_source_files.py.
+#
+# >>> TODO - UNCONFIRMED <<<
+# The source system for us5 was not specified. Kafka is ASSUMED here so the
+# structure is complete and deployable. If us5 lands from Oracle instead, copy
+# the shape of conf/us2/sources.yml and change the job in
+# resources/landing_us5.job.yml to the Oracle pattern.
+# =============================================================================
+
+use_case: us5
+
+sources:
+  - source_id: us5_kfk_orders
+    source_system: kafka
+    source_object: us5.orders.v1          # topic name
+    target_table: kfk_orders               # lands in edp_landing_<env>.us5.kfk_orders
+    load_strategy: cdc_stream              # the only valid strategy for Kafka
+    primary_keys: [order_id]
+    secret_scope: edp-kafka
+    owner_email: edp-us5-team@example.com
+    options:
+      starting_offsets: earliest
+      max_offsets_per_trigger: 500000
+
+  - source_id: us5_kfk_events
+    source_system: kafka
+    source_object: us5.events.v2
+    target_table: kfk_events
+    load_strategy: cdc_stream
+    primary_keys: [event_id]
+    secret_scope: edp-kafka
+    owner_email: edp-us5-team@example.com
+    options:
+      # High-volume and replayable from the source of record, so a cold start
+      # takes the tail rather than the full retention window.
+      starting_offsets: latest
+      max_offsets_per_trigger: 2000000

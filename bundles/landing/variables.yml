@@ -1,0 +1,65 @@
+# Variable DECLARATIONS. Values are set per target in databricks.yml.
+#
+# Rule: if a value differs between dev and prod, it is a variable. If it is the
+# same everywhere, hardcode it in the resource file. Resource files must never
+# contain an environment name, a host or a catalog.
+
+variables:
+  env:
+    description: Physical environment (nonprod | preprod | prod). Forms the catalog suffix.
+  catalog_prefix:
+    description: First segment of every catalog name. Catalogs are <prefix>_<layer>_<env>.
+    default: edp
+  schema_prefix:
+    description: >-
+      Per-developer schema prefix. "jsmith_" in a personal sandbox, "" in every
+      shared environment. This is what lets ten developers share one workspace.
+    default: ""
+
+  # -- compute ----------------------------------------------------------------
+  min_workers:
+    description: Autoscale floor for job clusters.
+    default: 1
+  max_workers:
+    description: Autoscale ceiling for job clusters.
+    default: 2
+  runtime_engine:
+    description: >-
+      Photon toggle for JOB CLUSTERS, which take an enum: STANDARD | PHOTON.
+      Kept separate from photon below because declarative pipelines take a
+      boolean for the same idea, and passing one to the other fails obscurely.
+    default: STANDARD
+  photon:
+    description: Photon toggle for declarative PIPELINES, which take a boolean.
+    default: false
+  max_retries:
+    description: Task retry count. 0 in a sandbox so failures surface immediately.
+    default: 0
+  oracle_concurrency:
+    description: How many Oracle tables to extract in parallel in the for_each task.
+    default: 2
+
+  etl_policy_id:
+    description: >-
+      Resolved ID of the edp-etl-standard cluster policy in the target workspace.
+      Cluster policies are NOT a bundle resource type - the platform team creates
+      them and this looks the ID up by name. NOTE: a lookup takes a literal and
+      cannot reference a variable, which works here because the policy carries
+      the SAME NAME in all three workspaces and only its ID differs.
+    lookup:
+      cluster_policy: edp-etl-standard
+
+  # -- identities and notifications -------------------------------------------
+  run_as_sp:
+    description: Application ID of the run-as service principal. Empty in the dev target.
+    default: ""
+  alert_email:
+    description: Where job failure notifications go.
+
+  # -- secrets ----------------------------------------------------------------
+  kafka_secret_scope:
+    description: Secret scope holding Kafka broker and SASL credentials.
+    default: edp-kafka
+  oracle_secret_scope:
+    description: Secret scope holding the Oracle JDBC URL and credentials.
+    default: edp-oracle

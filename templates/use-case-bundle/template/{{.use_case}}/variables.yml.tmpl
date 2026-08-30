@@ -1,0 +1,47 @@
+variables:
+  env:
+    description: Physical environment (nonprod | preprod | prod). Forms the catalog suffix.
+  catalog_prefix:
+    description: First segment of every catalog name. Catalogs are <prefix>_<layer>_<env>.
+    default: edp
+  schema_prefix:
+    description: Per-developer schema prefix; "" in every shared environment.
+    default: ""
+  max_retries:
+    description: Task retry count. 0 in a sandbox so failures surface immediately.
+    default: 0
+  dq_fail_on_error:
+    description: Whether an error-severity data quality breach fails the job.
+    default: "true"
+  recon_enabled:
+    description: Whether the Cloudera parity reconciliation runs. See docs/13.
+    default: "true"
+  run_as_sp:
+    description: Application ID of the run-as service principal. Empty in the dev target.
+    default: ""
+  alert_email:
+    description: Where job failure notifications go.
+  warehouse_id:
+    description: >-
+      Resolved ID of the environment DBSQL warehouse, looked up BY NAME so no
+      warehouse ID is committed. Created by the platform team, not this bundle.
+    lookup:
+      warehouse: edp-sql-warehouse
+{{if eq .compute_style "job_cluster"}}
+  min_workers:
+    description: Autoscale floor for job clusters.
+    default: 1
+  max_workers:
+    description: Autoscale ceiling for job clusters.
+    default: 2
+  runtime_engine:
+    description: "STANDARD | PHOTON. Job clusters take an enum, not a boolean."
+    default: STANDARD
+  etl_policy_id:
+    description: >-
+      Resolved ID of the edp-etl-standard cluster policy. Policies are not a
+      bundle resource type; the platform team creates them and this looks the ID
+      up by name.
+    lookup:
+      cluster_policy: edp-etl-standard
+{{end}}

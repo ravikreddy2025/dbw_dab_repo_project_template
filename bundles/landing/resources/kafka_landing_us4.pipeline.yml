@@ -1,0 +1,50 @@
+# US4 Kafka landing, as a Lakeflow Declarative Pipeline.
+#
+# Declarative rather than a plain job because the pipeline owns checkpointing,
+# restart-on-failure and schema evolution, and its expectations run in-stream.
+# Oracle stays a plain job because it is bounded batch work.
+
+resources:
+  pipelines:
+    kafka_landing_us4:
+      name: kafka_landing_us4
+      catalog: ${var.catalog_prefix}_landing_${var.env}
+      # In a sandbox this becomes jsmith_us4; in prod, us4.
+      schema: ${var.schema_prefix}us4
+
+      photon: ${var.photon}
+      continuous: false          # triggered; the job above owns the schedule
+      serverless: false
+
+      configuration:
+        # Pipeline code cannot read job parameters, so context arrives as
+        # configuration and is read with spark.conf.get().
+        edp.env: ${var.env}
+        edp.use_case: us4
+        edp.catalog_prefix: ${var.catalog_prefix}
+        edp.schema_prefix: ${var.schema_prefix}
+        edp.bundle_target: ${bundle.target}
+        edp.kafka_secret_scope: ${var.kafka_secret_scope}
+
+      clusters:
+        - label: default
+          policy_id: ${var.etl_policy_id}
+          autoscale:
+            min_workers: ${var.min_workers}
+            max_workers: ${var.max_workers}
+            mode: ENHANCED
+          custom_tags:
+            use_case: us4
+            layer: landing
+            environment: ${var.env}
+
+      libraries:
+        - notebook:
+            path: ../src/pipelines/kafka_landing.py
+
+      notifications:
+        - email_recipients:
+            - ${var.alert_email}
+          alerts:
+            - on-update-failure
+            - on-flow-failure

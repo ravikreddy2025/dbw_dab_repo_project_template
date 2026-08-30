@@ -1,0 +1,60 @@
+# Creates and upgrades every table in the ops catalog.
+#
+# Idempotent, so the CD pipeline runs it on every platform deploy - that is how a
+# new audit column reaches all three environments the same way code does.
+#
+# Runs on serverless: it is a few seconds of DDL and does not justify a cluster.
+
+resources:
+  jobs:
+    platform_bootstrap_ops:
+      name: platform_bootstrap_ops
+      description: "Create/upgrade ops.audit, ops.config, ops.logs and ops.recon. Safe to re-run."
+
+      tags:
+        use_case: platform
+        layer: platform
+        managed_by: databricks_bundle
+        environment: ${var.env}
+
+      email_notifications:
+        on_failure:
+          - ${var.alert_email}
+
+      # Deployed paused. The CD pipeline runs it explicitly straight after the
+      # platform bundle deploys; there is no reason for it to fire on a timer.
+      schedule:
+        quartz_cron_expression: "0 0 3 * * ?"
+        timezone_id: UTC
+        pause_status: PAUSED
+
+      max_concurrent_runs: 1
+
+      # The five base parameters every job in this repo passes.
+      parameters:
+        - name: env
+          default: ${var.env}
+        - name: use_case
+          default: platform
+        - name: catalog_prefix
+          default: ${var.catalog_prefix}
+        - name: schema_prefix
+          default: ""              # the platform bundle never runs in a sandbox
+        - name: bundle_target
+          default: ${bundle.target}
+
+      tasks:
+        - task_key: bootstrap_ops
+          notebook_task:
+            notebook_path: ../src/bootstrap_ops_framework.py
+          environment_key: default
+
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "2"
+            dependencies:
+              # The notebook uses dab_common.config to resolve the ops catalog
+              # and schema names. Staged into ./dist/ by the build step (and by
+              # scripts/dev/Build-Wheels.ps1 for a local deploy).
+              - ./dist/dab_common-*.whl

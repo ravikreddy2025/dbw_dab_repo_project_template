@@ -1,0 +1,44 @@
+# Build the SHARED wheels a bundle actually needs into its dist/, then publish it.
+#
+# WHICH WHEELS, AND WHY IT IS PER BUNDLE
+#   dab_common   config, audit, quality  - every bundle
+#   edp_landing  registry, kafka, oracle - the landing bundle only
+#   edp_recon    parity framework        - the recon bundle only
+#
+# Installing every shared wheel into every bundle would be the same coupling
+# mistake in miniature: a change to the parity framework would rebuild and
+# redeploy production ETL. Each bundle declares what it depends on.
+#
+# WHY THEY ARE COPIED IN rather than referenced across the repo:
+# DABs requires library paths to sit inside the bundle root, so
+# ../../libs/dab_common produces "path is not contained in bundle root path".
+# Building into ./dist/ keeps ./dist/dab_common-*.whl valid on every CLI version
+# with no reliance on sync.paths. See docs/04-bundle-authoring.md#wheels.
+#
+# The bundle's OWN wheel (where it has one) is built by the bundle itself via the
+# artifacts: block at deploy time, so a local `databricks bundle deploy` behaves
+# identically to the pipeline.
+
+parameters:
+  - name: bundlePath
+    type: string
+  - name: sharedLibs
+    type: string
+    default: "dab_common"      # space-separated names under libs/
+
+steps:
+  - script: |
+      set -euo pipefail
+      rm -rf "${{ parameters.bundlePath }}/dist"
+      mkdir -p "${{ parameters.bundlePath }}/dist"
+      for lib in ${{ parameters.sharedLibs }}; do
+        echo "--- building libs/$lib ---"
+        python -m build --wheel --outdir "${{ parameters.bundlePath }}/dist" "libs/$lib"
+      done
+      echo "--- wheels staged for ${{ parameters.bundlePath }} ---"
+      ls -la "${{ parameters.bundlePath }}/dist"
+    displayName: "Build shared wheels (${{ parameters.sharedLibs }})"
+
+  - publish: "${{ parameters.bundlePath }}/dist"
+    artifact: "$(WHEEL_ARTIFACT_NAME)"
+    displayName: "Publish wheels for the deploy stages"

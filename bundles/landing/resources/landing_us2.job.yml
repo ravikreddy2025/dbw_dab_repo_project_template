@@ -1,0 +1,102 @@
+# US2 landing: Oracle -> edp_landing_<env>.us2
+#
+# Driven entirely by ops.config.landing_source. Three tasks, and the shape matters:
+#   1. list_sources       reads the registry, emits a JSON array of source_ids
+#   2. land_tables        a for_each task that fans that array out, N at a time
+#   3. summarise_landing  runs even on partial failure, so the summary is complete
+#
+# Adding a table is a row in conf/us2/sources.yml. Nobody edits this file to
+# onboard a source.
+
+resources:
+  jobs:
+    landing_us2:
+      name: landing_us2
+      description: "Metadata-driven Oracle extract into the us2 schema of the landing catalog."
+
+      tags:
+        use_case: us2
+        layer: landing
+        source_system: oracle
+        managed_by: databricks_bundle
+        environment: ${var.env}
+
+      schedule:
+        quartz_cron_expression: "0 0 2 * * ?"        # 02:00 UTC daily
+        timezone_id: UTC
+        pause_status: UNPAUSED
+
+      max_concurrent_runs: 1
+
+      email_notifications:
+        on_failure:
+          - ${var.alert_email}
+
+      parameters:
+        - name: env
+          default: ${var.env}
+        - name: use_case
+          default: us2
+        - name: catalog_prefix
+          default: ${var.catalog_prefix}
+        - name: schema_prefix
+          default: ${var.schema_prefix}
+        - name: bundle_target
+          default: ${bundle.target}
+        - name: oracle_secret_scope
+          default: ${var.oracle_secret_scope}
+        # Overridable at run time to reprocess one table:
+        #   databricks bundle run landing_us2 -t dev --params source_ids=us2_ora_customers
+        - name: source_ids
+          default: ""
+
+      job_clusters:
+        - job_cluster_key: oracle_etl
+          new_cluster:
+            # Policy looked up by NAME per target, so no policy ID is committed.
+            policy_id: ${var.etl_policy_id}
+            spark_version: "15.4.x-scala2.12"
+            node_type_id: Standard_D4ds_v5
+            data_security_mode: SINGLE_USER
+            runtime_engine: ${var.runtime_engine}
+            autoscale:
+              min_workers: ${var.min_workers}
+              max_workers: ${var.max_workers}
+            spark_conf:
+              spark.databricks.delta.schema.autoMerge.enabled: "true"
+            custom_tags:
+              use_case: us2
+              layer: landing
+              environment: ${var.env}
+
+      tasks:
+        - task_key: list_sources
+          notebook_task:
+            notebook_path: ../src/jobs/list_oracle_sources.py
+          job_cluster_key: oracle_etl
+          max_retries: ${var.max_retries}
+
+        - task_key: land_tables
+          depends_on:
+            - task_key: list_sources
+          for_each_task:
+            # A JSON array string emitted via dbutils.jobs.taskValues.
+            inputs: "{{tasks.list_sources.values.source_ids}}"
+            # Bounded so a wide fan-out cannot exhaust the Oracle connection pool.
+            concurrency: ${var.oracle_concurrency}
+            task:
+              task_key: land_one_table
+              notebook_task:
+                notebook_path: ../src/jobs/oracle_land_entry.py
+                base_parameters:
+                  source_id: "{{input}}"
+              job_cluster_key: oracle_etl
+              max_retries: ${var.max_retries}
+
+        - task_key: summarise_landing
+          depends_on:
+            - task_key: land_tables
+          notebook_task:
+            notebook_path: ../src/jobs/summarise_landing.py
+          job_cluster_key: oracle_etl
+          run_if: ALL_DONE

@@ -1,0 +1,24 @@
+"""Unit tests for {{.use_case}}.
+
+These run in PR validation with no Spark and no cluster. Anything needing a real
+SparkSession goes in a separate file guarded by `pytest.importorskip("pyspark")`
+and marked `@pytest.mark.integration`.
+"""
+
+from dab_common.config import build_context
+
+
+def test_sandbox_and_shared_names_differ():
+    """The property every use case depends on: a developer cannot write to the
+    shared schema by accident."""
+    sandbox = build_context({"env": "nonprod", "use_case": "{{.use_case}}", "schema_prefix": "jsmith_"})
+    shared = build_context({"env": "prod", "use_case": "{{.use_case}}"})
+    assert sandbox.fq_schema("curated") != shared.fq_schema("curated")
+
+
+def test_layers_resolve_to_different_catalogs():
+    ctx = build_context({"env": "prod", "use_case": "{{.use_case}}"})
+    assert ctx.catalog("landing") != ctx.catalog("curated") != ctx.catalog("datamart")
+
+
+# TODO: add real tests for {{.use_case}}_module.logic

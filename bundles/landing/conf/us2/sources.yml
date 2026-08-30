@@ -1,0 +1,63 @@
+# =============================================================================
+# US2 LANDING SOURCES  -  ORACLE
+# =============================================================================
+# Onboarding a table is a PR against THIS FILE. No new notebook, no new job, no
+# YAML change under resources/. The landing_seed_source_registry job MERGEs this
+# into ops.config.landing_source for whichever environment it runs in.
+#
+# Owned by the US2 team - see CODEOWNERS. Validated at PR time by
+# bundles/landing/tests/test_source_files.py, which rejects an incremental source
+# with no watermark and a partition_column with no bounds.
+# =============================================================================
+
+use_case: us2
+
+sources:
+  - source_id: us2_ora_customers
+    source_system: oracle
+    source_object: SALES.CUSTOMERS
+    target_table: ora_customers            # lands in edp_landing_<env>.us2.ora_customers
+    load_strategy: incremental
+    watermark_column: LAST_UPDATE_DT
+    primary_keys: [CUSTOMER_ID]
+    secret_scope: edp-oracle
+    owner_email: edp-us2-team@example.com
+    options:
+      # Partitioned read: CUSTOMER_ID is indexed and evenly distributed, so
+      # splitting the extract 8 ways is a real speedup. Do NOT copy this onto a
+      # source with no index on the partition column - it will be slower.
+      partition_column: CUSTOMER_ID
+      lower_bound: 1
+      upper_bound: 5000000
+      num_partitions: 8
+
+  - source_id: us2_ora_products
+    source_system: oracle
+    source_object: SALES.PRODUCTS
+    target_table: ora_products
+    # Small reference table: a full reload is cheaper than tracking deltas.
+    load_strategy: full
+    primary_keys: [PRODUCT_ID]
+    secret_scope: edp-oracle
+    owner_email: edp-us2-team@example.com
+
+  - source_id: us2_ora_orders
+    source_system: oracle
+    source_object: SALES.ORDERS
+    target_table: ora_orders
+    load_strategy: incremental
+    watermark_column: ORDER_UPDATED_TS
+    primary_keys: [ORDER_ID]
+    secret_scope: edp-oracle
+    owner_email: edp-us2-team@example.com
+
+  # Retired when the source system was decommissioned. Kept with is_active:false
+  # so the intent is visible in git rather than the row silently vanishing.
+  - source_id: us2_ora_legacy_accounts
+    source_system: oracle
+    source_object: LEGACY.ACCOUNTS
+    target_table: ora_legacy_accounts
+    load_strategy: full
+    secret_scope: edp-oracle
+    is_active: false
+    owner_email: edp-us2-team@example.com

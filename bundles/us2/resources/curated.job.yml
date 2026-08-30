@@ -1,0 +1,70 @@
+# us2: landing -> curated.
+#
+# Runs on SERVERLESS. Curation is short and bursty and runs many times a day, so
+# cluster startup would dominate the actual work. The landing bundle uses job
+# clusters because its Oracle extract is long and JDBC-bound. Both styles are in
+# this repo on purpose - see docs/04-bundle-authoring.md#compute.
+
+resources:
+  jobs:
+    us2_curated:
+      name: us2_curated
+      description: "Cleanse and conform us2 landing data into edp_curated_<env>.us2."
+
+      tags:
+        use_case: us2
+        layer: curated
+        managed_by: databricks_bundle
+        environment: ${var.env}
+
+      schedule:
+        quartz_cron_expression: "0 0 4 * * ?"        # 04:00 UTC, after landing
+        timezone_id: UTC
+        pause_status: UNPAUSED
+
+      max_concurrent_runs: 1
+
+      email_notifications:
+        on_failure:
+          - ${var.alert_email}
+
+      # The five base parameters every job in this repo passes. Declared at JOB
+      # level so every task inherits them.
+      parameters:
+        - name: env
+          default: ${var.env}
+        - name: use_case
+          default: us2
+        - name: catalog_prefix
+          default: ${var.catalog_prefix}
+        - name: schema_prefix
+          default: ${var.schema_prefix}
+        - name: bundle_target
+          default: ${bundle.target}
+        - name: dq_fail_on_error
+          default: ${var.dq_fail_on_error}
+
+      tasks:
+        - task_key: curate
+          notebook_task:
+            notebook_path: ../src/jobs/curate.py
+          environment_key: default
+          max_retries: ${var.max_retries}
+
+        - task_key: curated_quality_gate
+          depends_on:
+            - task_key: curate
+          notebook_task:
+            notebook_path: ../src/jobs/curated_quality_gate.py
+          environment_key: default
+          # No retries on the gate: if the data is bad, checking it again returns
+          # the same bad data.
+          max_retries: 0
+
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ./dist/dab_common-*.whl
+              - ./dist/edp_us2-*.whl

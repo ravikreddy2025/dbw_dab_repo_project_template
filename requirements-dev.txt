@@ -1,0 +1,8 @@
+# Local developer + CI tooling.
+# The Databricks CLI is NOT a pip package - install it separately (see docs/03-developer-guide.md).
+build==1.2.2
+ruff==0.6.9
+pytest==8.3.3
+pytest-cov==5.0.0
+PyYAML==6.0.2
+# databricks-connect / pyspark are optional; unit tests in this repo run without Spark.

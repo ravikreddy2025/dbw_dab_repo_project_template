@@ -1,0 +1,119 @@
+# =============================================================================
+# EDP US4 BUNDLE  -  curated + datamart for use case us4
+# -----------------------------------------------------------------------------
+# One bundle per use case, holding BOTH its curated and datamart layers, because
+# a use case is the natural release unit: its curated and datamart changes almost
+# always ship together.
+#
+# Writes to:
+#   edp_curated_<env>.us4     the middle layer
+#   edp_datamart_<env>.us4    the semantic layer
+# Reads from:
+#   edp_landing_<env>.us4     landed by the SHARED landing bundle (kafka)
+# Writes audit to:
+#   edp_ops_<env>.audit
+#
+# Reconciliation against Cloudera is NOT here. It is owned by QA and lives in
+# bundles/recon, so a validation change never redeploys this bundle. See
+# docs/13-migration-and-cutover.md.
+#
+# Owner: @edp-us4-team
+# Depends on: edp_platform (catalogs, schemas, ops tables) and edp_landing (data)
+# =============================================================================
+
+bundle:
+  name: edp_us4
+  databricks_cli_version: ">=0.240.0"
+
+include:
+  - variables.yml
+  - resources/*.yml
+
+artifacts:
+  us4_module:
+    type: whl
+    path: .
+    build: python -m build --wheel --outdir dist
+    # Content-based suffix, so redeploying during iteration is never served a
+    # cached wheel with the same version number.
+    dynamic_version: true
+
+targets:
+
+  # PERSONAL SANDBOX. mode:development gives [dev jsmith] job names, paused
+  # schedules and per-user file roots; schema_prefix isolates the DATA, so jsmith
+  # writes edp_curated_nonprod.jsmith_us4.
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://adb-0000000000000001.1.azuredatabricks.net   # PLACEHOLDER: nonprod
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      env: nonprod                 # a sandbox lives INSIDE nonprod
+      schema_prefix: ${workspace.current_user.short_name}_
+      max_retries: 0
+      dq_fail_on_error: "true"
+      alert_email: ${workspace.current_user.userName}
+
+  nonprod:
+    mode: production
+    workspace:
+      host: https://adb-0000000000000001.1.azuredatabricks.net   # PLACEHOLDER
+      root_path: /Workspace/Applications/${bundle.name}/${bundle.target}
+    run_as:
+      service_principal_name: ${var.run_as_sp}
+    permissions:
+      - level: CAN_MANAGE
+        group_name: edp-platform-leads
+      - level: CAN_MANAGE_RUN
+        group_name: edp-us4-team
+      - level: CAN_VIEW
+        group_name: edp-developers
+    variables:
+      env: nonprod
+      schema_prefix: ""
+      max_retries: 1
+      dq_fail_on_error: "true"
+      run_as_sp: 11111111-1111-1111-1111-111111111111        # PLACEHOLDER
+      alert_email: edp-us4-team@example.com
+
+  preprod:
+    mode: production
+    workspace:
+      host: https://adb-0000000000000002.2.azuredatabricks.net   # PLACEHOLDER
+      root_path: /Workspace/Applications/${bundle.name}/${bundle.target}
+    run_as:
+      service_principal_name: ${var.run_as_sp}
+    permissions:
+      - level: CAN_MANAGE
+        group_name: edp-platform-leads
+      - level: CAN_VIEW
+        group_name: edp-qa
+    variables:
+      env: preprod
+      schema_prefix: ""
+      max_retries: 2
+      dq_fail_on_error: "true"
+      run_as_sp: 22222222-2222-2222-2222-222222222222        # PLACEHOLDER
+      alert_email: edp-preprod-alerts@example.com
+
+  prod:
+    mode: production
+    workspace:
+      host: https://adb-0000000000000003.3.azuredatabricks.net   # PLACEHOLDER
+      root_path: /Workspace/Applications/${bundle.name}/${bundle.target}
+    run_as:
+      service_principal_name: ${var.run_as_sp}
+    permissions:
+      - level: CAN_MANAGE
+        group_name: edp-platform-leads
+      - level: CAN_VIEW
+        group_name: edp-support
+    variables:
+      env: prod
+      schema_prefix: ""
+      max_retries: 3
+      dq_fail_on_error: "true"
+      run_as_sp: 33333333-3333-3333-3333-333333333333        # PLACEHOLDER
+      alert_email: edp-prod-oncall@example.com

@@ -1,0 +1,71 @@
+# US2 parity reconciliation.
+#
+# One job per use case, all running the SAME notebook. They schedule, fail and
+# retire independently: us2 can cut over and have this job removed while the
+# others are still in parallel run.
+#
+# Runs at 08:00, after the us2 datamart build at 06:00. The notebook does not
+# TRUST that offset - it checks ops.audit.job_run for a successful us2 ETL and
+# records SKIPPED rather than comparing stale output. See edp_recon.gate.
+
+resources:
+  jobs:
+    recon_us2:
+      name: recon_us2
+      description: "Compare us2 Databricks output against the Cloudera reference. Cutover evidence."
+
+      tags:
+        use_case: us2
+        layer: recon
+        owned_by: qa
+        managed_by: databricks_bundle
+        environment: ${var.env}
+
+      schedule:
+        quartz_cron_expression: "0 0 8 * * ?"        # 08:00 UTC, after the datamart build
+        timezone_id: UTC
+        pause_status: UNPAUSED
+
+      max_concurrent_runs: 1
+
+      email_notifications:
+        on_failure:
+          - ${var.alert_email}
+        # A parity MISMATCH is a finding, not a job failure - the job completes
+        # and records it. So QA is notified on success too, or a daily mismatch
+        # would be silent.
+        on_success:
+          - ${var.alert_email}
+
+      parameters:
+        - name: env
+          default: ${var.env}
+        - name: use_case
+          default: us2
+        - name: catalog_prefix
+          default: ${var.catalog_prefix}
+        - name: schema_prefix
+          default: ${var.schema_prefix}
+        - name: bundle_target
+          default: ${bundle.target}
+        - name: recon_enabled
+          default: ${var.recon_enabled}
+        - name: etl_window_hours
+          default: ${var.etl_window_hours}
+        - name: legacy_secret_scope
+          default: ${var.legacy_secret_scope}
+
+      tasks:
+        - task_key: reconcile
+          notebook_task:
+            notebook_path: ../src/jobs/reconcile.py
+          environment_key: default
+          max_retries: ${var.max_retries}
+
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ./dist/dab_common-*.whl
+              - ./dist/edp_recon-*.whl

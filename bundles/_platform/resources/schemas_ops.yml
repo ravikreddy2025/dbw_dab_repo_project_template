@@ -1,0 +1,75 @@
+# OPS CATALOG SCHEMAS - functional, NOT per use case.
+#
+# audit, config, logs and recon are cross-cutting: every use case writes to them
+# and no use case owns them. That is why the ops catalog is the one place where
+# the schema axis is a function rather than a use case.
+#
+# All four are still sandbox-prefixed at runtime (jsmith_config, jsmith_audit).
+# THE ONE RULE: every schema this framework touches is prefixed in a sandbox. If
+# ops.config were shared, a developer seeding their own landing sources would
+# overwrite the registry that shared nonprod jobs read from.
+
+resources:
+  schemas:
+
+    ops_audit:
+      name: audit
+      catalog_name: ${var.catalog_prefix}_ops_${var.env}
+      comment: "Job run, table load and data quality audit. Append-only."
+      grants:
+        - principal: edp-platform-leads
+          privileges: [ALL_PRIVILEGES]
+        # Every job in every bundle appends audit rows, so MODIFY is broader
+        # here than in the data layers. Safe because the tables are append-only.
+        - principal: ${var.writer_group}
+          privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+        - principal: ${var.reader_group}
+          privileges: [USE_SCHEMA, SELECT]
+        - principal: edp-support
+          privileges: [USE_SCHEMA, SELECT]
+
+    ops_config:
+      name: config
+      catalog_name: ${var.catalog_prefix}_ops_${var.env}
+      comment: >-
+        Landing source registry and watermarks. Seeded from
+        bundles/landing/conf/<use_case>/sources.yml by a job - never edited by hand.
+      grants:
+        - principal: edp-platform-leads
+          privileges: [ALL_PRIVILEGES]
+        - principal: ${var.writer_group}
+          privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+        - principal: ${var.reader_group}
+          privileges: [USE_SCHEMA, SELECT]
+
+    ops_logs:
+      name: logs
+      catalog_name: ${var.catalog_prefix}_ops_${var.env}
+      comment: "Structured application logs emitted by jobs. Append-only."
+      grants:
+        - principal: edp-platform-leads
+          privileges: [ALL_PRIVILEGES]
+        - principal: ${var.writer_group}
+          privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+        - principal: ${var.reader_group}
+          privileges: [USE_SCHEMA, SELECT]
+        - principal: edp-support
+          privileges: [USE_SCHEMA, SELECT]
+
+    ops_recon:
+      name: recon
+      catalog_name: ${var.catalog_prefix}_ops_${var.env}
+      comment: >-
+        Cloudera-to-Databricks parity results, plus landed legacy extracts used
+        as the reference side of a comparison. This schema is the evidence base
+        for cutover sign-off. See docs/13-migration-and-cutover.md.
+      grants:
+        - principal: edp-platform-leads
+          privileges: [ALL_PRIVILEGES]
+        - principal: ${var.writer_group}
+          privileges: [USE_SCHEMA, CREATE_TABLE, MODIFY, SELECT]
+        - principal: ${var.reader_group}
+          privileges: [USE_SCHEMA, SELECT]
+        # QA reads parity results in every environment to sign off a cutover.
+        - principal: edp-qa
+          privileges: [USE_SCHEMA, SELECT]

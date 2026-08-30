@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "edp_landing"
+version = "0.4.0"
+description = "EDP landing framework: source registry, Kafka and Oracle ingestion. Shared by all use cases."
+requires-python = ">=3.11"
+# dab_common is installed alongside this wheel by the job's library list, not
+# resolved from an index - keep it out of `dependencies` so the build stays offline.
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["edp_landing*"]

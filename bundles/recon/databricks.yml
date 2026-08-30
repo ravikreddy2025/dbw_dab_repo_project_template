@@ -1,0 +1,136 @@
+# =============================================================================
+# EDP RECON BUNDLE  -  Cloudera to Databricks parity.  OWNED BY QA.
+# -----------------------------------------------------------------------------
+# WHY THIS IS A SEPARATE BUNDLE
+#
+# Reconciliation has a different OWNER, a different IDENTITY and a different
+# LIFESPAN from the ETL it checks. All three break if it lives inside a use-case
+# bundle:
+#
+#   Owner     QA writes the checks and signs off the tolerances; the use-case
+#             teams write the ETL. Inside a use-case bundle, a QA tolerance change
+#             is a PR into the dev team's bundle - which triggers that use case's
+#             CD pipeline and REDEPLOYS PRODUCTION ETL. A validation change must
+#             never be able to do that.
+#
+#   Identity  This bundle READS every data catalog and WRITES only ops.recon.
+#             The ETL run-as identity writes data and reads far less. Separate
+#             bundles are what let each have exactly the grants it needs.
+#
+#   Lifespan  Recon exists for the migration. At decommission the whole bundle,
+#             its library and its pipeline are deleted in one PR - and that PR
+#             touches no production ETL at all.
+#
+# GENERIC FRAMEWORK, PER-USE-CASE CONFIG
+# One notebook (src/jobs/reconcile.py) serves all five use cases, because for a
+# lift and shift every use case is the same job: compare this target table
+# against that source table. Onboarding a sixth is a conf/us6.yml plus a job
+# entry - never code.
+#
+# One JOB per use case, so they schedule, fail and retire independently: us2 can
+# cut over and switch its recon off while us4 is still in parallel run.
+#
+# Owner: @edp-qa    Depends on: edp_platform (ops.recon) and the use-case bundles
+#                               (the data being checked)
+# =============================================================================
+
+bundle:
+  name: edp_recon
+  databricks_cli_version: ">=0.240.0"
+
+include:
+  - variables.yml
+  - resources/*.yml
+
+targets:
+
+  # PERSONAL SANDBOX. Used by QA authoring a config, and by a developer during
+  # porting who wants to check their own work before handing it over. Compares
+  # the developer sandbox tables against the shared legacy extract - read-only on
+  # the legacy side, so a sandbox run can never disturb the reference data.
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://adb-0000000000000001.1.azuredatabricks.net   # PLACEHOLDER: nonprod
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      env: nonprod                 # a sandbox lives INSIDE nonprod
+      schema_prefix: ${workspace.current_user.short_name}_
+      max_retries: 0
+      recon_enabled: "true"
+      etl_window_hours: 720        # a sandbox ETL may be days old; do not gate it out
+      alert_email: ${workspace.current_user.userName}
+
+  # Nonprod is where QA proves a recon CONFIG is right before it starts gating a
+  # release. It is not migration evidence - preprod and prod are.
+  nonprod:
+    mode: production
+    workspace:
+      host: https://adb-0000000000000001.1.azuredatabricks.net   # PLACEHOLDER
+      root_path: /Workspace/Applications/${bundle.name}/${bundle.target}
+    run_as:
+      service_principal_name: ${var.run_as_sp}
+    permissions:
+      - level: CAN_MANAGE
+        group_name: edp-platform-leads
+      - level: CAN_MANAGE_RUN
+        group_name: edp-qa
+      - level: CAN_VIEW
+        group_name: edp-developers
+    variables:
+      env: nonprod
+      schema_prefix: ""
+      max_retries: 1
+      recon_enabled: "true"
+      etl_window_hours: 24
+      run_as_sp: 44444444-4444-4444-4444-444444444444        # PLACEHOLDER: sp-edp-recon-nonprod
+      alert_email: edp-qa@example.com
+
+  preprod:
+    mode: production
+    workspace:
+      host: https://adb-0000000000000002.2.azuredatabricks.net   # PLACEHOLDER
+      root_path: /Workspace/Applications/${bundle.name}/${bundle.target}
+    run_as:
+      service_principal_name: ${var.run_as_sp}
+    permissions:
+      - level: CAN_MANAGE
+        group_name: edp-platform-leads
+      # QA can TRIGGER a re-check in preprod without waiting for the schedule -
+      # they cannot deploy, which keeps the checked artefact immutable.
+      - level: CAN_MANAGE_RUN
+        group_name: edp-qa
+    variables:
+      env: preprod
+      schema_prefix: ""
+      max_retries: 2
+      recon_enabled: "true"
+      etl_window_hours: 24
+      run_as_sp: 55555555-5555-5555-5555-555555555555        # PLACEHOLDER: sp-edp-recon-preprod
+      alert_email: edp-qa@example.com
+
+  prod:
+    mode: production
+    workspace:
+      host: https://adb-0000000000000003.3.azuredatabricks.net   # PLACEHOLDER
+      root_path: /Workspace/Applications/${bundle.name}/${bundle.target}
+    run_as:
+      service_principal_name: ${var.run_as_sp}
+    permissions:
+      - level: CAN_MANAGE
+        group_name: edp-platform-leads
+      # QA needs prod run rights here and nowhere else: the parallel run happens
+      # in production, and it is QA that has to be able to re-check it.
+      - level: CAN_MANAGE_RUN
+        group_name: edp-qa
+      - level: CAN_VIEW
+        group_name: edp-support
+    variables:
+      env: prod
+      schema_prefix: ""
+      max_retries: 2
+      recon_enabled: "true"
+      etl_window_hours: 24
+      run_as_sp: 66666666-6666-6666-6666-666666666666        # PLACEHOLDER: sp-edp-recon-prod
+      alert_email: edp-qa@example.com

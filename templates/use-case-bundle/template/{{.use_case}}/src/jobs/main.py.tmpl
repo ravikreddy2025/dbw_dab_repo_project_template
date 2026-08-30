@@ -1,0 +1,29 @@
+# Databricks notebook source
+# MAGIC %md
+# MAGIC # {{.use_case}} - curated
+# MAGIC
+# MAGIC Keep this notebook thin. Business logic belongs in
+# MAGIC `src/{{.use_case}}_module/`, where it can be unit-tested without a cluster.
+# MAGIC A notebook past ~50 lines of real logic is a refactor waiting to happen.
+# MAGIC
+# MAGIC Ported Cloudera code goes in `src/ported/` and is CALLED from here - see
+# MAGIC `docs/14-porting-guide.md`.
+
+# COMMAND ----------
+
+from dab_common.audit import audited_run
+from dab_common.config import build_context, ensure_schema
+from {{.use_case}}_module.logic import run
+
+ctx = build_context(dbutils.widgets.getAll())
+print(f"running {{.use_case}} in {ctx.env}")
+print(f"  landing : {ctx.fq_schema('landing')}")
+print(f"  curated : {ctx.fq_schema('curated')}")
+
+# COMMAND ----------
+
+# audited_run guarantees exactly one terminal row in ops.audit.job_run and
+# re-raises on failure so the Databricks run is still marked failed.
+with audited_run(spark, ctx, layer="curated"):
+    ensure_schema(spark, ctx, "curated")
+    run(spark, ctx)

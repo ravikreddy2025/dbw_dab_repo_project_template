@@ -1,0 +1,129 @@
+# Unity Catalog volumes - anything that is a FILE rather than a table.
+#
+# Streaming checkpoints live on a volume (not DBFS) so they inherit UC access
+# control, and so each use case - and each developer sandbox - gets its own
+# checkpoint directory. See edp_landing.kafka.checkpoint_path().
+#
+# Volumes are created after their parent schema automatically; the bundle
+# resolves that ordering itself, so no explicit dependency is declared.
+
+resources:
+  volumes:
+
+    landing_us1_checkpoints:
+      name: _checkpoints
+      catalog_name: ${var.catalog_prefix}_landing_${var.env}
+      schema_name: us1
+      volume_type: MANAGED
+      comment: "Structured Streaming checkpoints for us1. Never delete while a stream is live."
+
+    landing_us1_inbound:
+      name: inbound
+      catalog_name: ${var.catalog_prefix}_landing_${var.env}
+      schema_name: us1
+      volume_type: MANAGED
+      comment: "File drop zone for us1 extracts that arrive as files rather than a stream."
+
+    landing_us2_checkpoints:
+      name: _checkpoints
+      catalog_name: ${var.catalog_prefix}_landing_${var.env}
+      schema_name: us2
+      volume_type: MANAGED
+      comment: "Structured Streaming checkpoints for us2. Never delete while a stream is live."
+
+    landing_us2_inbound:
+      name: inbound
+      catalog_name: ${var.catalog_prefix}_landing_${var.env}
+      schema_name: us2
+      volume_type: MANAGED
+      comment: "File drop zone for us2 extracts that arrive as files rather than a stream."
+
+    landing_us3_checkpoints:
+      name: _checkpoints
+      catalog_name: ${var.catalog_prefix}_landing_${var.env}
+      schema_name: us3
+      volume_type: MANAGED
+      comment: "Structured Streaming checkpoints for us3. Never delete while a stream is live."
+
+    landing_us3_inbound:
+      name: inbound
+      catalog_name: ${var.catalog_prefix}_landing_${var.env}
+      schema_name: us3
+      volume_type: MANAGED
+      comment: "File drop zone for us3 extracts that arrive as files rather than a stream."
+
+    landing_us4_checkpoints:
+      name: _checkpoints
+      catalog_name: ${var.catalog_prefix}_landing_${var.env}
+      schema_name: us4
+      volume_type: MANAGED
+      comment: "Structured Streaming checkpoints for us4. Never delete while a stream is live."
+
+    landing_us4_inbound:
+      name: inbound
+      catalog_name: ${var.catalog_prefix}_landing_${var.env}
+      schema_name: us4
+      volume_type: MANAGED
+      comment: "File drop zone for us4 extracts that arrive as files rather than a stream."
+
+    landing_us5_checkpoints:
+      name: _checkpoints
+      catalog_name: ${var.catalog_prefix}_landing_${var.env}
+      schema_name: us5
+      volume_type: MANAGED
+      comment: "Structured Streaming checkpoints for us5. Never delete while a stream is live."
+
+    landing_us5_inbound:
+      name: inbound
+      catalog_name: ${var.catalog_prefix}_landing_${var.env}
+      schema_name: us5
+      volume_type: MANAGED
+      comment: "File drop zone for us5 extracts that arrive as files rather than a stream."
+
+    # Rows rejected by data quality checks, kept for investigation rather than
+    # dropped. One per use case so an investigation never crosses a boundary.
+
+    curated_us1_quarantine:
+      name: _quarantine
+      catalog_name: ${var.catalog_prefix}_curated_${var.env}
+      schema_name: us1
+      volume_type: MANAGED
+      comment: "Rows rejected by us1 data quality checks."
+
+    curated_us2_quarantine:
+      name: _quarantine
+      catalog_name: ${var.catalog_prefix}_curated_${var.env}
+      schema_name: us2
+      volume_type: MANAGED
+      comment: "Rows rejected by us2 data quality checks."
+
+    curated_us3_quarantine:
+      name: _quarantine
+      catalog_name: ${var.catalog_prefix}_curated_${var.env}
+      schema_name: us3
+      volume_type: MANAGED
+      comment: "Rows rejected by us3 data quality checks."
+
+    curated_us4_quarantine:
+      name: _quarantine
+      catalog_name: ${var.catalog_prefix}_curated_${var.env}
+      schema_name: us4
+      volume_type: MANAGED
+      comment: "Rows rejected by us4 data quality checks."
+
+    curated_us5_quarantine:
+      name: _quarantine
+      catalog_name: ${var.catalog_prefix}_curated_${var.env}
+      schema_name: us5
+      volume_type: MANAGED
+      comment: "Rows rejected by us5 data quality checks."
+
+    # Legacy Cloudera extracts used as the reference side of a reconciliation.
+    # Lives in ops, not in landing, because it is migration evidence rather than
+    # production data - and it is deleted once the use case has cut over.
+    recon_legacy_extracts:
+      name: legacy_extracts
+      catalog_name: ${var.catalog_prefix}_ops_${var.env}
+      schema_name: recon
+      volume_type: MANAGED
+      comment: "Cloudera-side extracts for parity comparison. Removed after cutover."

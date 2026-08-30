@@ -1,0 +1,137 @@
+# =============================================================================
+# EDP LANDING BUNDLE  -  SHARED BY EVERY USE CASE
+# -----------------------------------------------------------------------------
+# Lands raw data into edp_landing_<env>.<use_case>. One job per use case, so us1
+# and us2 can be scheduled, run and fail independently even though they deploy
+# together.
+#
+#   us1, us3, us4  -> Kafka
+#   us2            -> Oracle
+#   us5            -> see conf/us5/sources.yml (TODO: confirm the source system)
+#
+# WHY LANDING IS ONE SHARED BUNDLE
+# Landing is a horizontal capability: the same reader serves any use case
+# arriving on Kafka, including ones that do not exist yet. Curation and datamart
+# logic is business-domain specific and belongs to each use case bundle.
+#
+# THE TRADE-OFF, STATED PLAINLY
+# One bundle means a change for us1 redeploys landing for us2-us5 as well.
+# Mitigated three ways: per-use-case config folders with their own CODEOWNERS,
+# one job per use case so runtime stays independent, and the framework living in
+# libs/edp_landing so splitting this bundle later is cheap.
+#
+# Owner: @edp-landing-team    Depends on: edp_platform
+# =============================================================================
+
+bundle:
+  name: edp_landing
+  databricks_cli_version: ">=0.240.0"
+
+include:
+  - variables.yml
+  - resources/*.yml
+
+artifacts:
+  landing_module:
+    type: whl
+    path: .
+    build: python -m build --wheel --outdir dist
+    dynamic_version: true
+
+targets:
+
+  # PERSONAL SANDBOX. `mode: development` gives [dev jsmith] job names, paused
+  # schedules and per-user file roots; `schema_prefix` isolates the DATA, so
+  # jsmith lands into edp_landing_nonprod.jsmith_us1.
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://adb-0000000000000001.1.azuredatabricks.net   # PLACEHOLDER: nonprod
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      env: nonprod                 # a sandbox lives INSIDE nonprod
+      schema_prefix: ${workspace.current_user.short_name}_
+      min_workers: 1
+      max_workers: 2
+      runtime_engine: STANDARD
+      photon: false
+      max_retries: 0
+      oracle_concurrency: 2
+      alert_email: ${workspace.current_user.userName}
+
+  nonprod:
+    mode: production
+    workspace:
+      host: https://adb-0000000000000001.1.azuredatabricks.net   # PLACEHOLDER
+      root_path: /Workspace/Applications/${bundle.name}/${bundle.target}
+    run_as:
+      service_principal_name: ${var.run_as_sp}
+    permissions:
+      - level: CAN_MANAGE
+        group_name: edp-platform-leads
+      - level: CAN_MANAGE_RUN
+        group_name: edp-landing-team
+      - level: CAN_VIEW
+        group_name: edp-developers
+    variables:
+      env: nonprod
+      schema_prefix: ""
+      min_workers: 1
+      max_workers: 4
+      runtime_engine: STANDARD
+      photon: false
+      max_retries: 1
+      oracle_concurrency: 4
+      run_as_sp: 11111111-1111-1111-1111-111111111111        # PLACEHOLDER
+      alert_email: edp-landing-alerts@example.com
+
+  preprod:
+    mode: production
+    workspace:
+      host: https://adb-0000000000000002.2.azuredatabricks.net   # PLACEHOLDER
+      root_path: /Workspace/Applications/${bundle.name}/${bundle.target}
+    run_as:
+      service_principal_name: ${var.run_as_sp}
+    permissions:
+      - level: CAN_MANAGE
+        group_name: edp-platform-leads
+      - level: CAN_VIEW
+        group_name: edp-qa
+    variables:
+      env: preprod
+      schema_prefix: ""
+      # Sized like prod on purpose: a performance problem must surface here,
+      # where QA can see it, not for the first time in production.
+      min_workers: 2
+      max_workers: 8
+      runtime_engine: PHOTON
+      photon: true
+      max_retries: 2
+      oracle_concurrency: 6
+      run_as_sp: 22222222-2222-2222-2222-222222222222        # PLACEHOLDER
+      alert_email: edp-preprod-alerts@example.com
+
+  prod:
+    mode: production
+    workspace:
+      host: https://adb-0000000000000003.3.azuredatabricks.net   # PLACEHOLDER
+      root_path: /Workspace/Applications/${bundle.name}/${bundle.target}
+    run_as:
+      service_principal_name: ${var.run_as_sp}
+    permissions:
+      - level: CAN_MANAGE
+        group_name: edp-platform-leads
+      - level: CAN_VIEW
+        group_name: edp-support
+    variables:
+      env: prod
+      schema_prefix: ""
+      min_workers: 2
+      max_workers: 12
+      runtime_engine: PHOTON
+      photon: true
+      max_retries: 3
+      oracle_concurrency: 8
+      run_as_sp: 33333333-3333-3333-3333-333333333333        # PLACEHOLDER
+      alert_email: edp-prod-oncall@example.com

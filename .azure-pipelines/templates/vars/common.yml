@@ -1,0 +1,19 @@
+# Values shared by every pipeline. Changing one thing here changes it everywhere,
+# which is the point - four pipelines drifting apart is how "it works on
+# ingestion but not on curation" starts.
+
+variables:
+  # Pin the CLI. Must stay in step with `bundle.databricks_cli_version` in every
+  # bundles/*/databricks.yml, or a laptop and the agent will disagree.
+  DATABRICKS_CLI_VERSION: "0.240.0"
+
+  PYTHON_VERSION: "3.11"
+
+  # Azure AD application ID scope for Databricks. This GUID is the same for every
+  # Azure Databricks tenant in the world - it is the resource being requested,
+  # not a secret. Only needed by the SP-secret fallback in bundle-deploy.yml.
+  DATABRICKS_RESOURCE_ID: "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d"
+
+  # Where the built wheels are published between stages so preprod and prod
+  # install the exact binary that was validated in Build.
+  WHEEL_ARTIFACT_NAME: "wheels"

@@ -1,0 +1,43 @@
+# Variable DECLARATIONS. Values are set per target in databricks.yml.
+#
+# Rule: if a value differs between dev and prod, it is a variable. If it is the
+# same everywhere, hardcode it in the resource file. Resource files must never
+# contain an environment name, a host or a catalog.
+
+variables:
+  env:
+    description: Physical environment (nonprod | preprod | prod). Forms the catalog suffix.
+  catalog_prefix:
+    description: First segment of every catalog name. Catalogs are <prefix>_<layer>_<env>.
+    default: edp
+  schema_prefix:
+    description: >-
+      Per-developer schema prefix. "jsmith_" in a personal sandbox, "" in every
+      shared environment. This is what lets ten developers share one workspace.
+    default: ""
+
+  max_retries:
+    description: Task retry count. 0 in a sandbox so failures surface immediately.
+    default: 0
+  dq_fail_on_error:
+    description: >-
+      Whether an error-severity data quality breach fails the job. A variable, not
+      a constant, so a lead can turn it off for one environment during an incident
+      - but "true" everywhere by default, including sandboxes, so nobody meets a
+      check for the first time in preprod.
+    default: "true"
+
+  run_as_sp:
+    description: Application ID of the run-as service principal. Empty in the dev target.
+    default: ""
+  alert_email:
+    description: Where job failure notifications go.
+
+  warehouse_id:
+    description: >-
+      Resolved ID of the environment DBSQL warehouse, looked up BY NAME so no
+      warehouse ID is committed - each workspace has its own, and hardcoding one
+      is the classic way a preprod job queries nonprod. The warehouse is created
+      by the platform team, not by this bundle.
+    lookup:
+      warehouse: edp-sql-warehouse

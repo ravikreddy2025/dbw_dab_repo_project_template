@@ -1,0 +1,28 @@
+# Repo-wide tooling config. Each wheel (libs/dab_common, bundles/*/src) has its
+# own pyproject.toml for packaging; this file only configures lint + test.
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+exclude = [".databricks", "dist", "build", ".venv", "templates/module-bundle/template"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4"]
+ignore = [
+  "E402",  # notebooks legitimately import after the `# Databricks notebook source` header
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Databricks notebooks use magics and injected globals (spark, dbutils, dlt).
+"**/src/jobs/*.py"      = ["F821"]
+"**/src/pipelines/*.py" = ["F821"]
+"**/src/bootstrap_*.py" = ["F821"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["libs/dab_common/tests", "bundles"]
+python_files = ["test_*.py"]
+addopts = "-q --strict-markers"
+markers = [
+  "integration: requires a live Databricks workspace; skipped in PR validation",
+]

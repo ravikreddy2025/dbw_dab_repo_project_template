@@ -1,0 +1,76 @@
+# Starter curated job for {{.use_case}}. Replace the task body with real work;
+# keep the shape.
+#
+# The five base parameters below are the repo-wide convention - every job passes
+# them, and dab_common.config.build_context() reads them. Removing one means the
+# framework cannot tell which environment or use case it is in.
+
+resources:
+  jobs:
+    {{.use_case}}_curated:
+      name: {{.use_case}}_curated
+      description: "TODO: describe what this job does."
+
+      tags:
+        use_case: {{.use_case}}
+        layer: curated
+        managed_by: databricks_bundle
+        environment: ${var.env}
+
+      # Forced to PAUSED in the dev target by mode:development.
+      schedule:
+        quartz_cron_expression: "0 0 4 * * ?"
+        timezone_id: UTC
+        pause_status: UNPAUSED
+
+      max_concurrent_runs: 1
+
+      email_notifications:
+        on_failure:
+          - ${var.alert_email}
+
+      parameters:
+        - name: env
+          default: ${var.env}
+        - name: use_case
+          default: {{.use_case}}
+        - name: catalog_prefix
+          default: ${var.catalog_prefix}
+        - name: schema_prefix
+          default: ${var.schema_prefix}
+        - name: bundle_target
+          default: ${bundle.target}
+        - name: dq_fail_on_error
+          default: ${var.dq_fail_on_error}
+
+      tasks:
+        - task_key: curate
+          notebook_task:
+            notebook_path: ../src/jobs/main.py
+{{if eq .compute_style "job_cluster"}}          job_cluster_key: {{.use_case}}_compute
+{{else}}          environment_key: default
+{{end}}          max_retries: ${var.max_retries}
+
+{{if eq .compute_style "job_cluster"}}      job_clusters:
+        - job_cluster_key: {{.use_case}}_compute
+          new_cluster:
+            policy_id: ${var.etl_policy_id}
+            spark_version: "15.4.x-scala2.12"
+            node_type_id: Standard_D4ds_v5
+            data_security_mode: SINGLE_USER
+            runtime_engine: ${var.runtime_engine}
+            autoscale:
+              min_workers: ${var.min_workers}
+              max_workers: ${var.max_workers}
+            custom_tags:
+              use_case: {{.use_case}}
+              layer: curated
+              environment: ${var.env}
+{{else}}      environments:
+        - environment_key: default
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ./dist/dab_common-*.whl
+              - ./dist/edp_{{.use_case}}-*.whl
+{{end}}
