@@ -3,9 +3,17 @@
 -- =============================================================================
 -- >>> PLACEHOLDER <<<
 --
--- The mart tables are created by src/sql/dim_events.sql and
--- src/sql/fct_events.sql, which the datamart job runs on a SQL warehouse.
--- This file is the reference contract: what business consumers may rely on.
+-- THIS FILE IS EXECUTED. us3_migrate runs it on every deploy, before the
+-- datamart job. It owns the SHAPE of the mart tables - the contract business
+-- consumers rely on.
+--
+-- src/sql/dim_events.sql and src/sql/fct_events.sql fill them with DATA
+-- (MERGE and INSERT OVERWRITE), and neither redefines the table. That is why
+-- neither uses CREATE OR REPLACE TABLE: it would rebuild the table nightly from
+-- a SELECT and quietly discard everything declared here.
+--
+-- Changing a line here affects only environments that do not have the table yet.
+-- Existing ones need a numbered file in ../migrations/, in the same PR.
 --
 -- Written into: edp_datamart_<env>.us3
 -- Granted to:   edp-business-analysts in prod, by publish_marts.py

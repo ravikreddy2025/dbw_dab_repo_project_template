@@ -27,13 +27,13 @@ trigger:
       - release/*
   paths:
     include:
-      - bundles/us4/*
+      - bundles/us4
       # Only the shared wheel this bundle actually embeds. A change to
       # libs/edp_landing or libs/edp_recon must not redeploy this ETL.
-      - libs/dab_common/*
-      - .azure-pipelines/*
+      - libs/dab_common
+      - .azure-pipelines
     exclude:
-      - docs/*
+      - docs
       - "**/*.md"
 
 # PR builds are handled by ci-pr-validation.yml, not here.
@@ -62,6 +62,7 @@ stages:
       variableGroup: edp-nonprod
       dependsOn: [Build]
       condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+      migrateJob: us4_migrate
       runAfterDeploy: us4_curated
 
   # -- release/* -> preprod, gated on leads -----------------------------------
@@ -76,6 +77,7 @@ stages:
       variableGroup: edp-preprod
       dependsOn: [Build]
       condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/heads/release/'))
+      migrateJob: us4_migrate
       runAfterDeploy: us4_curated
 
   # -- release/* -> prod, gated on the client ---------------------------------
@@ -92,4 +94,5 @@ stages:
       # already reached preprod and passed its gate.
       dependsOn: [DeployPreProd]
       condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/heads/release/'))
+      migrateJob: us4_migrate
       runAfterDeploy: us4_curated

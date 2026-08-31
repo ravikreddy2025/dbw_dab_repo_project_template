@@ -26,13 +26,13 @@ trigger:
       - release/*
   paths:
     include:
-      - bundles/landing/*
+      - bundles/landing
       # Only the shared wheels this bundle embeds - not libs/edp_recon.
-      - libs/dab_common/*
-      - libs/edp_landing/*
-      - .azure-pipelines/*
+      - libs/dab_common
+      - libs/edp_landing
+      - .azure-pipelines
     exclude:
-      - docs/*
+      - docs
       - "**/*.md"
 
 # PR builds are handled by ci-pr-validation.yml, not here.

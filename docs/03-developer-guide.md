@@ -24,9 +24,21 @@ Check it:
 databricks --version
 ```
 
-You need **v0.240.0 or later**. The version is pinned in
-[`templates/vars/common.yml`](../.azure-pipelines/templates/vars/common.yml) and in
-every bundle's `databricks_cli_version`, so your laptop and the build agent agree.
+You need **v1.14.0 or later**. The exact version the build agent installs is
+pinned in
+[`templates/vars/common.yml`](../.azure-pipelines/templates/vars/common.yml), and the
+floor is in every bundle's `databricks_cli_version`.
+
+> **The commands above install the *latest* CLI, not the pinned one.** That is
+> normally fine — newer than the floor is what you want. But when a bundle behaves
+> differently on your laptop than on the agent, check the versions first:
+> `databricks --version` against `DATABRICKS_CLI_VERSION`. To match the agent
+> exactly, download the same archive it does:
+>
+> ```bash
+> V=1.14.1
+> curl -fsSL -O https://github.com/databricks/cli/releases/download/v$V/databricks_cli_${V}_linux_amd64.zip
+> ```
 
 > ### The mistake everybody makes once
 >
@@ -176,6 +188,94 @@ Spark-backed tests are marked `integration` and skipped unless you have pyspark:
 pip install pyspark
 pytest bundles/us1/tests -q          # now includes the Spark tests
 ```
+
+---
+
+## 4b. The interactive loop — before any bundle exists
+
+Most days you are not deploying anything. You are in a notebook on a running
+cluster, iterating on a transform. **The bundle comes last** — it is how the job
+gets *scheduled*, not how you develop the logic inside it.
+
+That session still writes somewhere, so it needs the same rules a deployed job
+has. One line gives you them:
+
+```python
+from dab_common import interactive_context
+
+ctx = interactive_context("us1")
+# [SANDBOX] writes -> edp_curated_nonprod.jsmith_us1 | reads -> edp_landing_nonprod.us1 (shared)
+
+df = spark.table(ctx.upstream("landing", "orders"))     # shared, real data
+df.write.saveAsTable(ctx.table("curated", "orders"))    # yours
+```
+
+The prefix is derived from `current_user()`. You never type it, and it matches
+what `bundle deploy -t dev` and the sandbox scripts use — so the job you deploy
+later writes to the same place your notebook did.
+
+### Turning the prefix off
+
+It is a parameter, not a law:
+
+```python
+ctx = interactive_context("us1", isolated=False)
+# [SHARED] writes -> edp_curated_nonprod.us1 | reads -> edp_landing_nonprod.us1 (shared)
+```
+
+and for a bundle deploy:
+
+```bash
+databricks bundle deploy --target dev --var schema_prefix=
+```
+
+**When to leave it off.** If you are the only person touching a use case this
+sprint, an unprefixed nonprod schema is simpler and nothing bad happens. Turn it
+on when two people work the same use case at once, when you are testing something
+destructive (a MERGE, a backfill, a schema change), or when you want to keep a
+result while someone else keeps rerunning the shared job.
+
+**Why it is safe to default to off.** Developers hold `SELECT`, not `MODIFY`, on
+shared schemas. An unprefixed write does not corrupt a shared table — it fails
+with a permission error. The grant is the boundary; the prefix is the
+convenience. If you ever grant developers `MODIFY` on shared nonprod, that
+reverses: the prefix becomes the only thing standing between a typo and nine
+colleagues' data.
+
+`isolated=False` also means `ensure_schema` creates nothing and `ctx.sample()`
+stops truncating — you are simply running as nonprod runs.
+
+---
+
+## 4c. Where do these PowerShell scripts run?
+
+**Not in Databricks.** Databricks never executes PowerShell. Everything under
+`scripts/` runs somewhere else and talks to Databricks over the CLI or REST.
+
+| Script | Runs on | Wraps |
+|---|---|---|
+| `scripts/dev/*.ps1` | your laptop | 1–5 `databricks` CLI calls each |
+| `scripts/setup/Az-DevOps-Bootstrap.ps1` | an admin's machine, once | `az devops` / `az repos` |
+| `scripts/ci/*.py` | the build agent, inside the pipeline | nothing — plain Python |
+
+Only `scripts/ci/` is load-bearing: the pipeline calls it, and it fails builds.
+`scripts/setup/` is a one-time job worth having in version control instead of as
+screenshots in a wiki. **`scripts/dev/` is convenience only** — thin wrappers you
+can ignore entirely:
+
+```bash
+# Deploy-Sandbox.ps1  ->
+databricks bundle deploy --target dev
+# Destroy-Sandbox.ps1 ->
+databricks bundle destroy --target dev --auto-approve
+# Validate-All.ps1    ->
+ruff check . && pytest -q && python scripts/ci/check_bundle_references.py
+```
+
+They are PowerShell because the team is on Windows. The pipelines are bash, so
+nothing in CI depends on PowerShell. If your team is mixed, either install
+PowerShell 7 (cross-platform) or delete `scripts/dev/` and use the commands
+above — nothing else references them.
 
 ---
 

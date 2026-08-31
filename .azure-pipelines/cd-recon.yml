@@ -29,12 +29,12 @@ trigger:
       - release/*
   paths:
     include:
-      - bundles/recon/*
-      - libs/edp_recon/*
-      - libs/dab_common/*
-      - .azure-pipelines/*
+      - bundles/recon
+      - libs/edp_recon
+      - libs/dab_common
+      - .azure-pipelines
     exclude:
-      - docs/*
+      - docs
       - "**/*.md"
 
 pr: none

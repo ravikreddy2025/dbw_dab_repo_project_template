@@ -1,0 +1,22 @@
+# `{{.use_case}}` datamart — current shape
+
+>>> PLACEHOLDER <<<
+
+`CREATE TABLE IF NOT EXISTS` for every datamart table this use case owns, one
+file per table. Re-runnable, and run by `{{.use_case}}_migrate` before the
+migrations in `../migrations/`.
+
+**This folder is executed**, not documentation. It is the reviewed **contract** — the shape downstream consumers may rely on.
+Keep it in step with the migrations: a change lands here AND as a numbered
+migration, in the same PR.
+
+Bind `:catalog` and `:schema`; the runner passes them from `RuntimeContext`,
+already validated:
+
+```sql
+CREATE TABLE IF NOT EXISTS
+  IDENTIFIER(:catalog || '.' || :schema || '.your_table') (
+    ...
+  )
+USING DELTA;
+```

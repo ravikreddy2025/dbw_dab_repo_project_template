@@ -54,6 +54,8 @@ resources:
           notebook_task:
             notebook_path: ../src/jobs/seed_source_registry.py
           environment_key: default
+          # The seed is a MERGE from git - idempotent, safe to retry.
+          max_retries: ${var.max_retries}
 
       environments:
         - environment_key: default

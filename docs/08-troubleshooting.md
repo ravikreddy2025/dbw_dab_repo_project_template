@@ -6,6 +6,48 @@ The errors you will actually hit, with the exact text. Use your browser's find.
 
 ---
 
+## Triggers and gates
+
+### I merged to main and no pipeline ran
+
+Check the trigger path filters first. A single `*` in a path filter **does not
+cross a `/`**, so `bundles/us1/*` matches `bundles/us1/databricks.yml` and misses
+everything under `bundles/us1/src/`. Editing a job notebook then triggers nothing.
+
+Use the bare folder — `- bundles/us1` — which means "this folder and everything
+under it". `check_trigger_scope` fails the build on any `.../*` filter.
+
+Other causes, in order of likelihood: the branch is not in `trigger.branches`;
+YAML triggers are overridden in the pipeline's UI settings (Edit > ... >
+Triggers); the push only touched excluded paths.
+
+### A docs-only PR still runs the whole build
+
+Expected, if you were relying on the `paths: exclude` in a YAML `pr:` block.
+Azure Repos ignores YAML PR triggers entirely, so that block does nothing.
+
+Path filtering for PR validation lives on the **Build Validation branch policy**
+(`--path-filter`), not in the pipeline file. See docs/05.
+
+### Production deployed and nobody was asked to approve
+
+The `dbx-prod` Environment exists but has **no Approval check** on it.
+
+Azure DevOps auto-creates any environment a pipeline references. If nobody created
+`dbx-prod` with an approval, the first run creates it bare and deploys through it.
+The run is green and looks exactly like a gated one.
+
+```powershell
+# Fails and exits non-zero if preprod or prod has no approval check
+.\scripts\setup\Az-DevOps-Bootstrap.ps1 -Organisation ... -Project ... `
+    -Repository ... -LeadsGroup ... -ClientGroup ...
+```
+
+Add the check at **Pipelines > Environments > dbx-prod > Approvals and checks**,
+then re-run. Until it passes, treat preprod and prod as ungated.
+
+---
+
 ## CLI and setup
 
 ### `Error: unknown command "bundle" for "databricks"`
@@ -16,7 +58,7 @@ wrong thing — it has no `bundle` command.
 ```bash
 pip uninstall databricks-cli
 winget install Databricks.DatabricksCLI
-databricks --version        # must be 0.240.0 or later
+databricks --version        # must be 1.14.0 or later
 ```
 
 ### `Error: cannot resolve bundle auth configuration`
@@ -30,7 +72,7 @@ databricks current-user me
 
 Check that the host matches `workspace.host` for the target you are deploying.
 
-### `Error: requires databricks_cli_version >= 0.240.0`
+### `Error: requires databricks_cli_version >= 1.14.0`
 
 Your CLI is older than the bundle's pin. Upgrade:
 
@@ -40,6 +82,46 @@ winget upgrade Databricks.DatabricksCLI
 
 If you cannot upgrade, do not lower the pin — the agent uses the pinned version, and
 lowering it means your laptop and CI behave differently.
+
+### The pipeline installs a different CLI than the one it says it does
+
+Symptom: the build log header says one version and `databricks --version` in a later
+step reports another. Or a deploy that worked last week fails today with no commit in
+between.
+
+Cause: the install step piped `setup-cli/main/install.sh` into `sh`.
+**That script accepts no version argument** — `VERSION` is hardcoded near the top —
+so `| sh -s -- v1.2.3` is silently discarded and the agent installs whatever the tip
+of `main` pins on the day it runs. The pin looks real in the YAML and does nothing.
+
+Fix: download the released archive for the exact version, and assert the binary
+reports it. Both are in
+[`steps/setup-tooling.yml`](../.azure-pipelines/templates/steps/setup-tooling.yml);
+`check_cli_install_honours_pin` fails the build if anyone reverts it.
+
+Two related traps in the same script, which is why we do not use it on an agent:
+it installs to `/usr/local/bin` (root on some images), and it `exit 1`s when
+`databricks` already exists — so the *second* run on a self-hosted agent fails.
+
+### `Error: deployment state was created with the terraform engine`
+
+From CLI **1.3.0** new bundles use the **direct** deployment engine instead of
+Terraform. Greenfield deployments get it automatically and want it.
+
+You only hit this pointing a 1.x CLI at a workspace where an **older** CLI already
+deployed this bundle:
+
+```bash
+databricks bundle deployment migrate -t <target>
+databricks bundle plan -t <target>        # must show no changes
+```
+
+To defer the move, pin the old behaviour explicitly rather than pinning an old CLI:
+
+```yaml
+bundle:
+  engine: terraform
+```
 
 ---
 

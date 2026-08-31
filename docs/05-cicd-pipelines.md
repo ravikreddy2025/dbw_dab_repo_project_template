@@ -171,6 +171,19 @@ Worth adding on `dbx-prod`:
 `Az-DevOps-Bootstrap.ps1` creates the environments; the approval checks are added in
 the UI because the checks REST API is awkward to script and this is a one-time task.
 
+> ### An environment with no check is not a gate
+>
+> **Azure DevOps auto-creates any environment a pipeline references.** If nobody
+> ever created `dbx-prod`, the first `cd-*` run against it creates it — with no
+> checks — and deploys straight to production. Nothing fails. Nothing warns you.
+> The gate you designed simply is not there, and the green run looks identical to
+> a gated one.
+>
+> This is why `Az-DevOps-Bootstrap.ps1` **verifies the checks at the end and exits
+> non-zero** if `dbx-preprod` or `dbx-prod` has no Approval. Do not deploy to
+> either until that check passes. "The deploy succeeded" is not evidence that
+> anyone approved it.
+
 ---
 
 ## 5. PR validation
@@ -178,6 +191,43 @@ the UI because the checks REST API is awkward to script and this is a one-time t
 [`ci-pr-validation.yml`](../.azure-pipelines/ci-pr-validation.yml) is what the Build
 Validation branch policy points at. It **never deploys and never gets a service
 connection** — a PR branch is untrusted code.
+
+> ### `pr:` in YAML does nothing on Azure Repos
+>
+> Microsoft: *"For an Azure Repos Git repo, you cannot configure a PR trigger in
+> the YAML file. You need to use branch policies."*
+>
+> A `pr:` block with `branches:` and `paths:` under it is **silently ignored** —
+> which is worse than an error, because it reads like working configuration. A
+> docs-only PR would still run the full build and nothing would explain why.
+>
+> So the file says `pr: none`, and **branch and path filtering live on the Build
+> Validation policy**:
+>
+> ```bash
+> az repos policy build create --repository-id $repoId --branch main >   --build-definition-id $prValidationId --display-name 'PR validation' >   --path-filter '/bundles/*;/libs/*;/.azure-pipelines/*;/scripts/*;/templates/*;/pyproject.toml' >   --blocking true --enabled true --queue-on-source-update-only true
+> ```
+>
+> `check_pr_trigger_not_in_yaml` fails the build if a `pr:` block reappears.
+
+> ### Path filters: `bundles/us1/*` is not what you want
+>
+> Wildcards are supported in path filters, and a single `*` **does not cross a
+> `/`**. So `bundles/us1/*` matches `bundles/us1/databricks.yml` but **not**
+> `bundles/us1/src/jobs/curate.py` — the pipeline stops triggering on the code it
+> deploys, and the only symptom is a deploy that quietly never happens.
+>
+> Use the bare folder, which is the documented form for "this folder and
+> everything under it":
+>
+> ```yaml
+> paths:
+>   include:
+>     - bundles/us1          # not bundles/us1/*
+>     - libs/dab_common
+> ```
+>
+> `check_trigger_scope` rejects any `.../*` path filter.
 
 It:
 
@@ -295,7 +345,7 @@ Change exactly three things:
 ```yaml
 name: cd-reconciliation-$(Date:yyyyMMdd)$(Rev:.r)     # 1
 # ...
-      - bundles/reconciliation/*                       # 2  (trigger paths)
+      - bundles/reconciliation                         # 2  (trigger paths)
 # ...
       bundlePath: bundles/reconciliation               # 2  (every occurrence)
       runAfterDeploy: reconciliation_main              # 3  (a real job key)

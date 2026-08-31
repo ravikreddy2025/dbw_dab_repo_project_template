@@ -30,6 +30,9 @@ parameters:
     default: []
   - name: variableGroup
     type: string
+  - name: migrateJob
+    type: string
+    default: ""
   - name: runAfterDeploy
     type: string
     default: ""
@@ -65,4 +68,5 @@ stages:
                     serviceConnection: ${{ parameters.serviceConnection }}
                     target: ${{ parameters.target }}
                     bundlePath: ${{ parameters.bundlePath }}
+                    migrateJob: ${{ parameters.migrateJob }}
                     runAfterDeploy: ${{ parameters.runAfterDeploy }}

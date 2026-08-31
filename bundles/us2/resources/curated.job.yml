@@ -1,9 +1,33 @@
 # us2: landing -> curated.
 #
-# Runs on SERVERLESS. Curation is short and bursty and runs many times a day, so
-# cluster startup would dominate the actual work. The landing bundle uses job
-# clusters because its Oracle extract is long and JDBC-bound. Both styles are in
-# this repo on purpose - see docs/04-bundle-authoring.md#compute.
+# =============================================================================
+# THIS IS THE CLASSIC-COMPUTE EXEMPLAR. us1, us3, us4, us5 are serverless.
+# =============================================================================
+# Both styles are in this repo on purpose. Copy whichever fits the use case; do
+# not standardise on one because it is what the template happened to say.
+#
+# Why us2 is classic
+#   Its source is Oracle over JDBC. That needs a driver JAR on the cluster, a
+#   fixed egress identity the DBA can allow-list, and a long-running extract
+#   where a few minutes of cluster startup is noise. Serverless gives you none
+#   of the first two.
+#
+# Why the others are serverless
+#   Curation is short and bursty and runs many times a day. Startup would
+#   dominate the actual work.
+#
+# THE STRUCTURAL DIFFERENCES, which are the point of keeping this file:
+#
+#   serverless (us1)                    classic (here)
+#   ------------------------------      ------------------------------------
+#   environment_key: default            job_cluster_key: curated_etl
+#   environments[].spec.dependencies    libraries[] on each task
+#   no cluster block at all             job_clusters[].new_cluster
+#   no policy                           policy_id from a lookup
+#   no version pinning                  spark_version pinned explicitly
+#
+# Both tasks share ONE job cluster. Two clusters would mean paying startup
+# twice for a job whose second task takes seconds.
 
 resources:
   jobs:
@@ -16,6 +40,7 @@ resources:
         layer: curated
         managed_by: databricks_bundle
         environment: ${var.env}
+        compute: classic
 
       schedule:
         quartz_cron_expression: "0 0 4 * * ?"        # 04:00 UTC, after landing
@@ -47,15 +72,59 @@ resources:
           default: ${var.dev_sample_rows}
         # Read upstream from the SHARED schema. Override per run with
         #   --params upstream_mode=sandbox
-        # when you have materialised your own landing and want to chain it.
         - name: upstream_mode
           default: shared
+
+      job_clusters:
+        - job_cluster_key: curated_etl
+          new_cluster:
+            # Looked up by NAME per target, so no policy ID is committed. The
+            # policy is created by the platform team - cluster policies are not
+            # a bundle resource type. See docs/06.
+            policy_id: ${var.etl_policy_id}
+
+            # PIN THE RUNTIME. "latest LTS" is not a version: the same commit
+            # would deploy a different Spark to preprod next month than the one
+            # QA signed off, and a runtime upgrade would arrive unannounced,
+            # unreviewed and on a Tuesday.
+            spark_version: "15.4.x-scala2.12"
+            node_type_id: Standard_D4ds_v5
+
+            # Required for a Unity Catalog job cluster that runs as a single
+            # identity. SHARED mode would break the JDBC driver's local files.
+            data_security_mode: SINGLE_USER
+
+            # Enum (STANDARD | PHOTON), NOT a boolean. Declarative pipelines
+            # take a boolean for the same idea - see var.photon. Passing one
+            # where the other is expected fails obscurely.
+            runtime_engine: ${var.runtime_engine}
+
+            autoscale:
+              min_workers: ${var.min_workers}
+              max_workers: ${var.max_workers}
+
+            spark_conf:
+              spark.databricks.delta.schema.autoMerge.enabled: "true"
+
+            # Tags land on the underlying VMs, so cost reporting can attribute
+            # spend to a use case. Serverless gets this from the job tags.
+            custom_tags:
+              use_case: us2
+              layer: curated
+              environment: ${var.env}
 
       tasks:
         - task_key: curate
           notebook_task:
             notebook_path: ../src/jobs/curate.py
-          environment_key: default
+          job_cluster_key: curated_etl
+          # On classic compute, wheels are LIBRARIES on the task. Serverless
+          # declares the same thing under environments[].spec.dependencies.
+          # Paths stay inside the bundle root; the pipeline builds them into
+          # ./dist/ before deploy.
+          libraries:
+            - whl: ./dist/dab_common-*.whl
+            - whl: ./dist/edp_us2-*.whl
           max_retries: ${var.max_retries}
 
         - task_key: curated_quality_gate
@@ -63,15 +132,10 @@ resources:
             - task_key: curate
           notebook_task:
             notebook_path: ../src/jobs/curated_quality_gate.py
-          environment_key: default
-          # No retries on the gate: if the data is bad, checking it again returns
-          # the same bad data.
+          job_cluster_key: curated_etl
+          libraries:
+            - whl: ./dist/dab_common-*.whl
+            - whl: ./dist/edp_us2-*.whl
+          # No retries on the gate: if the data is bad, checking it again
+          # returns the same bad data.
           max_retries: 0
-
-      environments:
-        - environment_key: default
-          spec:
-            environment_version: "2"
-            dependencies:
-              - ./dist/dab_common-*.whl
-              - ./dist/edp_us2-*.whl

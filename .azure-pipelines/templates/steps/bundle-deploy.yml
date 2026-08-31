@@ -17,6 +17,9 @@ parameters:
     type: string
   - name: bundlePath
     type: string
+  - name: migrateJob
+    type: string
+    default: ""          # optional job key that applies schema changes
   - name: runAfterDeploy
     type: string
     default: ""          # optional job key to run as a smoke test
@@ -60,6 +63,24 @@ steps:
         databricks bundle deploy --target ${{ parameters.target }}
         echo "--- deployed resources ---"
         databricks bundle summary --target ${{ parameters.target }}
+
+  # Schema first. A deploy publishes job DEFINITIONS; it does not touch a table.
+  # If a release adds a column, the tables in this environment still have the old
+  # shape until this runs - and the smoke run below would fail on it. Running it
+  # here means a bad migration stops the release at this gate, not at 04:00
+  # tomorrow in an environment nobody is watching.
+  - ${{ if ne(parameters.migrateJob, '') }}:
+      - task: AzureCLI@2
+        displayName: "Apply schema changes: ${{ parameters.migrateJob }}"
+        inputs:
+          azureSubscription: ${{ parameters.serviceConnection }}
+          scriptType: bash
+          scriptLocation: inlineScript
+          workingDirectory: ${{ parameters.bundlePath }}
+          inlineScript: |
+            set -euo pipefail
+            databricks bundle run ${{ parameters.migrateJob }} \
+              --target ${{ parameters.target }}
 
   - ${{ if ne(parameters.runAfterDeploy, '') }}:
       - task: AzureCLI@2

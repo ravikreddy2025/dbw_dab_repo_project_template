@@ -16,6 +16,31 @@ variables:
       shared environment. This is what lets ten developers share one workspace.
     default: ""
 
+  # -- classic compute ---------------------------------------------------------
+  # us2 runs curation on a JOB CLUSTER, not serverless - see resources/curated.job.yml
+  # for why. us1/us3/us4/us5 are serverless and declare none of this.
+  min_workers:
+    description: Autoscale floor for the curated job cluster.
+    default: 1
+  max_workers:
+    description: Autoscale ceiling for the curated job cluster.
+    default: 2
+  runtime_engine:
+    description: >-
+      Photon toggle for JOB CLUSTERS, which take an enum: STANDARD | PHOTON.
+      Declarative pipelines take a boolean for the same idea; passing one where
+      the other is expected fails obscurely.
+    default: STANDARD
+  etl_policy_id:
+    description: >-
+      Resolved ID of the edp-etl-standard cluster policy in the target workspace.
+      Cluster policies are NOT a bundle resource type - the platform team creates
+      them and this looks the ID up by name. A lookup takes a literal and cannot
+      reference a variable, which works because the policy carries the SAME NAME
+      in all three workspaces and only its ID differs.
+    lookup:
+      cluster_policy: edp-etl-standard
+
   max_retries:
     description: Task retry count. 0 in a sandbox so failures surface immediately.
     default: 0

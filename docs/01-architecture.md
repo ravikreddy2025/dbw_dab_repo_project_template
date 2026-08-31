@@ -88,7 +88,7 @@ flowchart TB
 
     RC["recon (SHARED, QA-owned)<br/>parity for all five use cases"]
 
-    DC["libs/dab_common<br/>config, audit, quality"]
+    DC["libs/dab_common<br/>config, audit, quality<br/>migrate, marts"]
     EL["libs/edp_landing<br/>registry, kafka, oracle"]
     ER["libs/edp_recon<br/>parity framework"]
 
@@ -171,7 +171,7 @@ If landing does become one, split it: the framework already lives in `libs/`, so
 
 | Wheel | Contents | Depended on by |
 |---|---|---|
-| [`dab_common`](../libs/dab_common) | `config`, `audit`, `quality` | **every** bundle |
+| [`dab_common`](../libs/dab_common) | `config`, `audit`, `quality`, `migrate`, `marts` | **every** bundle |
 | [`edp_landing`](../libs/edp_landing) | `registry`, `kafka`, `oracle` | the landing bundle only |
 | [`edp_recon`](../libs/edp_recon) | `model`, `gate` | the recon bundle only. **Deleted at decommission.** |
 

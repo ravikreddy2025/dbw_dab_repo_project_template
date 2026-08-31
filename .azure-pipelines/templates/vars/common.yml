@@ -3,9 +3,21 @@
 # ingestion but not on curation" starts.
 
 variables:
-  # Pin the CLI. Must stay in step with `bundle.databricks_cli_version` in every
+  # Pin the CLI to an EXACT released version. This must be a real tag of
+  # github.com/databricks/cli, because setup-tooling.yml downloads
+  #   .../releases/download/v<this>/databricks_cli_<this>_linux_amd64.zip
+  # and then asserts the installed binary reports it. A typo fails the build in
+  # the first step rather than somewhere inside a deploy.
+  #
+  # Must also satisfy `bundle.databricks_cli_version` in every
   # bundles/*/databricks.yml, or a laptop and the agent will disagree.
-  DATABRICKS_CLI_VERSION: "0.240.0"
+  # check_bundle_references.py enforces both halves.
+  #
+  # NOTE ON 1.x: from CLI 1.3.0 new bundles use the DIRECT deployment engine
+  # instead of Terraform. Greenfield is the right time to be on it. If you ever
+  # point these bundles at a workspace where an older CLI already deployed them,
+  # run `databricks bundle deployment migrate` first. See docs/08.
+  DATABRICKS_CLI_VERSION: "1.14.1"
 
   PYTHON_VERSION: "3.11"
 

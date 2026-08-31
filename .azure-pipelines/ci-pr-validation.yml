@@ -19,15 +19,18 @@ name: ci-pr-$(Date:yyyyMMdd)$(Rev:.r)
 # the cd-* pipelines.
 trigger: none
 
-pr:
-  branches:
-    include:
-      - main
-      - release/*
-  paths:
-    exclude:
-      - docs/*
-      - "**/*.md"
+# `pr:` IS DELIBERATELY none, NOT a branch/path filter.
+#
+# Azure Repos Git does not support YAML PR triggers at all: "For an Azure Repos
+# Git repo, you cannot configure a PR trigger in the YAML file. You need to use
+# branch policies." A `pr:` block here is silently ignored - which is worse than
+# an error, because the path excludes under it look like they work and do not.
+# A docs-only PR would still run the full build.
+#
+# Branch AND path filtering for this pipeline therefore live on the Build
+# Validation branch policy (`--branch`, `--path-filter`), applied by
+# scripts/setup/Az-DevOps-Bootstrap.ps1. That is the only place they take effect.
+pr: none
 
 variables:
   - template: templates/vars/common.yml
@@ -50,8 +53,12 @@ stages:
 
           - script: |
               set -euo pipefail
-              TARGET="origin/$(System.PullRequest.TargetBranchName)"
-              git fetch origin "$(System.PullRequest.TargetBranchName)" --depth=50
+              BRANCH="$(System.PullRequest.TargetBranchName)"
+              TARGET="origin/$BRANCH"
+              # No --depth here. checkout used fetchDepth: 0, so the clone is
+              # complete; fetching with --depth would SHALLOW it and can then
+              # break the merge base that "$TARGET...HEAD" needs.
+              git fetch origin "$BRANCH"
               echo "--- files changed against $TARGET ---"
               git diff --name-only "$TARGET"...HEAD | tee changed.txt
             displayName: "Determine what this PR changed"

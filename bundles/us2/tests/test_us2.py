@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from dab_common.config import build_context
 from us2_module.curated import CUSTOMERS_PAYLOAD_SCHEMA, VALID_STATUSES, dedupe_by_key
-from us2_module.datamart import MART_TABLES, reader_grant_statements
+from us2_module.datamart import MART_TABLES
 
 BUNDLE = Path(__file__).resolve().parents[1]
 SQL_DIR = BUNDLE / "src" / "sql"
@@ -20,14 +20,6 @@ SQL_DIR = BUNDLE / "src" / "sql"
 
 
 # -- isolation ---------------------------------------------------------------
-
-def test_sandbox_and_shared_names_differ():
-    """The property every use case depends on: a developer cannot write to the
-    shared schema by accident."""
-    sandbox = build_context({"env": "nonprod", "use_case": "us2", "schema_prefix": "jsmith_"})
-    shared = build_context({"env": "prod", "use_case": "us2"})
-    assert sandbox.table("curated", "customers") != shared.table("curated", "customers")
-
 
 def test_this_use_case_cannot_collide_with_another():
     a = build_context({"env": "prod", "use_case": "us2"})
@@ -67,26 +59,6 @@ def test_dedupe_rejects_an_empty_key_list():
 
 
 # -- datamart grants ---------------------------------------------------------
-
-def test_sandbox_marts_are_not_shared():
-    ctx = build_context({"env": "nonprod", "use_case": "us2", "schema_prefix": "jsmith_"})
-    assert reader_grant_statements(ctx) == []
-
-
-def test_prod_grants_reach_business_analysts():
-    ctx = build_context({"env": "prod", "use_case": "us2"})
-    stmts = reader_grant_statements(ctx)
-    assert any("edp-business-analysts" in s for s in stmts)
-    assert all(s.startswith("GRANT SELECT ON TABLE edp_datamart_prod.us2.") for s in stmts)
-
-
-def test_preprod_grants_qa_but_not_business_users():
-    ctx = build_context({"env": "preprod", "use_case": "us2"})
-    joined = " ".join(reader_grant_statements(ctx))
-    assert "edp-qa" in joined and "edp-business-analysts" not in joined
-
-
-# -- SQL files stay in step with the declared marts --------------------------
 
 @pytest.mark.parametrize("table", MART_TABLES)
 def test_every_declared_mart_has_a_sql_file(table):

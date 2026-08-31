@@ -51,6 +51,10 @@ resources:
               curated_catalog: ${var.catalog_prefix}_curated_${var.env}
               schema: ${var.schema_prefix}us5
 
+          # Transient warehouse failures are real; retry like every other
+          # data-producing task in this job.
+          max_retries: ${var.max_retries}
+
         - task_key: build_fct_settlement
           depends_on:
             - task_key: build_dim_settlement
@@ -62,6 +66,8 @@ resources:
               catalog: ${var.catalog_prefix}_datamart_${var.env}
               curated_catalog: ${var.catalog_prefix}_curated_${var.env}
               schema: ${var.schema_prefix}us5
+
+          max_retries: ${var.max_retries}
 
         - task_key: publish_marts
           depends_on:

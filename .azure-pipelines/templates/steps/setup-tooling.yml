@@ -3,6 +3,23 @@
 # The CLI is a standalone binary, NOT a pip package. `pip install databricks-cli`
 # installs the deprecated v0.17 Python CLI, which has no `bundle` command at all
 # - a confusing failure that has cost teams an afternoon. See docs/08.
+#
+# WHY WE DO NOT PIPE install.sh INTO sh HERE
+# ------------------------------------------
+# `curl .../databricks/setup-cli/main/install.sh | sh` is real and is exactly what
+# Databricks documents - for a laptop. It is the wrong tool for a build agent:
+#
+#   1. install.sh takes NO arguments. VERSION is hardcoded near the top of the
+#      script, so `| sh -s -- v1.2.3` is silently discarded and the agent gets
+#      whatever the tip of setup-cli@main pins on the day it runs. A pipeline
+#      that claims to be pinned but floats is worse than one that never claimed.
+#   2. It installs into /usr/local/bin, which needs root on some agent images.
+#   3. It exits 1 when databricks is already present, so the second run on a
+#      self-hosted or reused agent fails on a clean checkout.
+#
+# Pinning by tag - setup-cli/v<version>/install.sh - fixes (1) only. Downloading
+# the released archive fixes all three, is idempotent, needs no root, and caches
+# in the agent tool directory. That is what we do.
 
 steps:
   - task: UsePythonVersion@0
@@ -18,7 +35,34 @@ steps:
 
   - script: |
       set -euo pipefail
-      curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh \
-        | sh -s -- v$(DATABRICKS_CLI_VERSION)
-      databricks --version
-    displayName: "Install Databricks CLI v$(DATABRICKS_CLI_VERSION)"
+
+      VERSION="$(DATABRICKS_CLI_VERSION)"
+
+      # Tool cache if the agent has one, temp otherwise. Never assume either.
+      TOOLS="${AGENT_TOOLSDIRECTORY:-${AGENT_TEMPDIRECTORY:-/tmp}}"
+      DEST="${TOOLS}/databricks/${VERSION}"
+      ARCHIVE="databricks_cli_${VERSION}_linux_amd64.zip"
+      URL="https://github.com/databricks/cli/releases/download/v${VERSION}/${ARCHIVE}"
+
+      # Idempotent. An agent that already has this exact version skips the
+      # download rather than failing on an existing binary.
+      if [ ! -x "${DEST}/databricks" ]; then
+        echo "Downloading ${URL}"
+        mkdir -p "${DEST}"
+        curl -fsSL --retry 3 -o "${TMPDIR:-/tmp}/${ARCHIVE}" "${URL}"
+        unzip -q -o "${TMPDIR:-/tmp}/${ARCHIVE}" -d "${DEST}"
+        chmod +x "${DEST}/databricks"
+      fi
+
+      echo "##vso[task.prependpath]${DEST}"
+
+      # Assert we got what we asked for. Without this the pin is decorative:
+      # every stage below would deploy - including to prod - with an unverified
+      # CLI build, and nothing in the log would say so.
+      ACTUAL="$("${DEST}/databricks" -v)"
+      if ! printf '%s' "${ACTUAL}" | grep -qF "${VERSION}"; then
+        echo "ERROR: pinned Databricks CLI ${VERSION}, but installed: ${ACTUAL}" >&2
+        exit 1
+      fi
+      echo "${ACTUAL} at ${DEST}/databricks"
+    displayName: "Install Databricks CLI $(DATABRICKS_CLI_VERSION)"

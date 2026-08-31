@@ -1,0 +1,35 @@
+-- =============================================================================
+-- EXAMPLE ONLY - this file is NOT executed.
+-- =============================================================================
+-- The runner globs `V*.sql`. This file ends in `.sql.example`, so it is invisible
+-- to both the job and the PR audit. Copy it, rename it, delete these notes.
+--
+--     cp EXAMPLE__add_column.sql.example V002__add_customers_currency.sql
+--
+-- =============================================================================
+-- V002  -  add currency to customers
+--
+-- Ticket:  EDP-1234
+-- Why:     Settlement reporting needs the source currency; today it is inferred
+--          from the country code, which is wrong for cross-border orders.
+-- Safe to re-run: yes (IF NOT EXISTS / idempotent UPDATE).
+-- =============================================================================
+
+-- :catalog and :schema are BOUND by the runner from RuntimeContext, already
+-- validated. Never concatenate them into the string yourself.
+
+ALTER TABLE IDENTIFIER(:catalog || '.' || :schema || '.customers')
+  ADD COLUMN IF NOT EXISTS currency STRING COMMENT 'ISO-4217, from the source system.';
+
+-- Backfill. Guarded so a re-run after a partial failure does not redo work:
+-- Delta has no transactional DDL, so a file that dies half way stays PENDING
+-- and will be attempted again.
+UPDATE IDENTIFIER(:catalog || '.' || :schema || '.customers')
+   SET currency = 'GBP'
+ WHERE currency IS NULL;
+
+-- REMEMBER: in the SAME pull request, add the column to
+--   ../curated/customers.sql
+-- as well. That file is what builds a BRAND-NEW environment; this file is what
+-- brings an EXISTING one forward. Change one without the other and fresh
+-- environments and old ones end up with different schemas, silently.

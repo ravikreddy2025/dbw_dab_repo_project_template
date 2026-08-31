@@ -119,7 +119,7 @@ flowchart TB
 | [`recon`](../bundles/recon) | Cloudera parity for **all** use cases | independent | **QA** |
 
 Plus three shared wheels: [`libs/dab_common`](../libs/dab_common) (config, audit,
-quality — used by everything), [`libs/edp_landing`](../libs/edp_landing) (the
+quality, schema migrations, mart publishing — used by everything), [`libs/edp_landing`](../libs/edp_landing) (the
 landing framework) and [`libs/edp_recon`](../libs/edp_recon) (the parity framework,
 deleted at decommission).
 
@@ -136,15 +136,16 @@ bundles/
   landing/     SHARED - conf/<use_case>/sources.yml, one job per use case
   recon/       SHARED, QA-owned - conf/<use_case>.yml, one job per use case
   us1/ .. us5/ curated + datamart, per use case
-    resources/                  curated.job.yml, datamart.job.yml
+    resources/                  curated.job.yml, datamart.job.yml, migrate.job.yml
     src/ported/                 Cloudera code, lifted as-is  <- migration zone
     src/<uc>_module/            refactored, unit-tested
     src/jobs/                   thin entry points
-    src/sql/                    mart definitions
-    src/ddl/                    layer contracts (reference)
+    src/sql/                    mart definitions (data)
+    src/ddl/curated|datamart/   table shape  <- EXECUTED by <uc>_migrate
+    src/ddl/migrations/         ordered schema changes, applied once
     tests/
 libs/
-  dab_common/  config, audit, quality               <- every bundle depends on this
+  dab_common/  config, audit, quality, migrate, marts  <- every bundle
   edp_recon/   parity framework                     <- recon bundle only
   edp_landing/ registry, kafka, oracle              <- the landing framework
 .azure-pipelines/  ci-pr-validation + one cd-* per bundle

@@ -100,3 +100,6 @@ resources:
             notebook_path: ../src/jobs/summarise_landing.py
           job_cluster_key: oracle_etl
           run_if: ALL_DONE
+          # Reporting only, and run_if: ALL_DONE means it runs after failures too.
+          # No retry: a second summary of the same run says the same thing.
+          max_retries: 0

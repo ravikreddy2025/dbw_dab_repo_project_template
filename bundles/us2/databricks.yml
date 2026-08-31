@@ -23,7 +23,7 @@
 
 bundle:
   name: edp_us2
-  databricks_cli_version: ">=0.240.0"
+  databricks_cli_version: ">=1.14.0"
 
 include:
   - variables.yml
@@ -52,6 +52,10 @@ targets:
     variables:
       env: nonprod                 # a sandbox lives INSIDE nonprod
       schema_prefix: ${workspace.current_user.short_name}_
+      # Classic compute. One worker - a sandbox is not a load test.
+      min_workers: 1
+      max_workers: 1
+      runtime_engine: STANDARD
       max_retries: 0
       dq_fail_on_error: "true"
       # Bound sandbox reads. Raise it when you need volume, or set 0 for a full
@@ -76,6 +80,10 @@ targets:
     variables:
       env: nonprod
       schema_prefix: ""
+      # Classic compute. Small; nonprod runs once a night.
+      min_workers: 1
+      max_workers: 2
+      runtime_engine: STANDARD
       max_retries: 1
       dq_fail_on_error: "true"
       dev_sample_rows: 0            # never truncate a shared environment
@@ -97,6 +105,10 @@ targets:
     variables:
       env: preprod
       schema_prefix: ""
+      # Classic compute. Same SHAPE as prod so a runtime measured here means something.
+      min_workers: 2
+      max_workers: 4
+      runtime_engine: PHOTON
       max_retries: 2
       dq_fail_on_error: "true"
       dev_sample_rows: 0            # never truncate a shared environment
@@ -118,6 +130,10 @@ targets:
     variables:
       env: prod
       schema_prefix: ""
+      # Classic compute. The real thing.
+      min_workers: 2
+      max_workers: 8
+      runtime_engine: PHOTON
       max_retries: 3
       dq_fail_on_error: "true"
       dev_sample_rows: 0            # never truncate a shared environment

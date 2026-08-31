@@ -15,6 +15,6 @@ RuntimeContext is always passed in.
 """
 
 from us4_module.curated import conform_inventory
-from us4_module.datamart import MART_TABLES, reader_grant_statements
+from us4_module.datamart import FACT_TABLE, MART_EXPECTATIONS, MART_TABLES
 
-__all__ = ["conform_inventory", "MART_TABLES", "reader_grant_statements"]
+__all__ = ["conform_inventory", "FACT_TABLE", "MART_EXPECTATIONS", "MART_TABLES"]

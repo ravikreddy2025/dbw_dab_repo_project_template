@@ -363,6 +363,88 @@ def build_context(params: dict[str, str] | None = None, **overrides: str) -> Run
     )
 
 
+def current_user_prefix(user: str | None = None, spark=None) -> str:
+    """Derive `jsmith_` from the signed-in user. Never typed by hand.
+
+    Must agree exactly with the two other places the prefix is derived:
+    `${workspace.current_user.short_name}_` on the bundle dev target, and the
+    same split in scripts/dev/*.ps1. If they disagree, a developer tears down a
+    sandbox that is not the one they deployed.
+    """
+    if user is None:
+        if spark is None:
+            try:
+                from pyspark.sql import SparkSession
+
+                spark = SparkSession.getActiveSession()
+            except Exception:
+                spark = None
+        if spark is None:
+            raise ConfigError(
+                "Could not determine the current user outside a Spark session. "
+                "Pass user=... or spark=..., or set schema_prefix explicitly."
+            )
+        user = spark.sql("SELECT current_user()").first()[0]
+
+    short = re.sub(r"[^A-Za-z0-9_]", "_", str(user).split("@")[0])
+    if not short or not _IDENT.match(short):
+        short = f"u_{short}"
+    return f"{short}_"
+
+
+def interactive_context(
+    use_case: str,
+    env: str = "nonprod",
+    isolated: bool = True,
+    user: str | None = None,
+    spark=None,
+    **overrides: str,
+) -> RuntimeContext:
+    """Build a context for an INTERACTIVE notebook session, outside any job.
+
+    The real inner loop on a data project is a notebook on a running cluster,
+    long before a bundle exists. That session still writes somewhere, so it
+    needs the same read/write rules a deployed job has - otherwise the first
+    casual `saveAsTable` lands in a schema nine other people are reading.
+
+        ctx = interactive_context("us1")                    # writes <you>_us1
+        ctx = interactive_context("us1", isolated=False)    # writes shared us1
+
+    `isolated=False` is the escape hatch, and it is a safe habit ONLY because
+    developers hold SELECT (not MODIFY) on shared schemas: an accidental write
+    fails with a permission error instead of corrupting a shared table. If you
+    grant developers MODIFY on shared nonprod, that safety net is gone and this
+    flag becomes genuinely dangerous.
+
+    Reads are shared either way - `ctx.upstream(...)` never takes the prefix.
+
+    Interactive access to prod is refused. Read prod with a SELECT if you must;
+    do not build something that can write to it from a notebook.
+    """
+    if env == "prod":
+        raise ConfigError(
+            "Refusing to build an interactive context for prod. Nothing should "
+            "write to production from a notebook. Read it with SELECT instead."
+        )
+
+    params = {"env": env, "use_case": use_case, "bundle_target": "interactive"}
+    if "schema_prefix" not in overrides:
+        params["schema_prefix"] = (
+            current_user_prefix(user, spark) if isolated else ""
+        )
+
+    ctx = build_context(params, **overrides)
+
+    # Always say which side you are on. This choice is invisible otherwise, and
+    # "I thought I was writing to my own schema" is the expensive version.
+    where = "SANDBOX" if ctx.is_sandbox else "SHARED"
+    print(
+        f"[{where}] writes -> {ctx.fq_schema('curated')} | "
+        f"reads   -> {ctx.catalog('landing')}.{use_case} (shared)"
+    )
+    return ctx
+
+
 def ensure_schema(spark, ctx: RuntimeContext, layer: str) -> str:
     """Create the sandbox schema for a developer if it does not exist yet.
 

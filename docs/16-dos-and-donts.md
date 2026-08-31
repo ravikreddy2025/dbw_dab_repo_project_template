@@ -80,7 +80,7 @@ without them.
 | 4 | Create the cluster policy and SQL warehouse with the **same name** in all three workspaces | `lookup:` resolves by name; only the ID differs |
 | 5 | Create ARM service connections with federated credentials, restricted to `cd-*` pipelines | A PR build must never reach a real workspace |
 | 6 | Run `Az-DevOps-Bootstrap.ps1` | Environments, variable groups, pipelines, branch policies |
-| 7 | Add approval checks to `dbx-preprod` and `dbx-prod` in the UI | The gate must not be editable in a PR |
+| 7 | Add approval checks to `dbx-preprod` and `dbx-prod` in the UI, then re-run the bootstrap until it exits 0 | An environment with no check is **not a gate** — ADO auto-creates missing environments and deploys through them |
 | 8 | Run `cd-platform` **to completion** | Everything else assumes its catalogs and schemas exist |
 | 9 | Run `cd-landing`, then the use-case pipelines, then `cd-recon` | Dependency order |
 | 10 | Seed the source registry, then verify one end-to-end run | Proves the whole chain |
@@ -90,6 +90,7 @@ without them.
 | ❌ **Don't** | Run a module pipeline before `cd-platform` has succeeded in that environment. |
 | ❌ **Don't** | Give a service connection access to all pipelines. |
 | ❌ **Don't** | Put the approval gate in pipeline YAML. On the Environment, it cannot be removed by a PR. |
+| ❌ **Don't** | Assume an Environment named in YAML is gated. Verify the check exists — a green prod deploy is not evidence anyone approved it. |
 | ❌ **Don't** | Reuse one service principal across environments. |
 
 ## Identities and grants
@@ -118,12 +119,16 @@ without them.
 
 | | |
 |---|---|
-| ✅ **Do** | Pin the CLI version, and keep it in step with every `databricks_cli_version`. *(CI check)* |
+| ✅ **Do** | Pin the CLI to an exact version **and assert the installed binary reports it**. A pin the installer ignores is decoration. *(CI check)* |
 | ✅ **Do** | Name the specific `libs/` a bundle embeds in its trigger paths. *(CI check)* |
 | ✅ **Do** | Build wheels **once** and have every deploy stage download that artifact. |
 | ✅ **Do** | Let every stage of a run check out the same commit. That is what makes promotion immutable. |
 | ❌ **Don't** | Use a blanket `libs/*` trigger. A QA parity change would redeploy production ETL. *(CI check)* |
 | ❌ **Don't** | Rebuild wheels in the prod stage. Prod must install the binary QA approved, not a rebuild of the same source. |
+| ❌ **Don't** | Install the CLI with `setup-cli/main/install.sh`. It takes no version argument, so your pin is discarded and the agent floats. *(CI check)* |
+| ❌ **Don't** | Trust a version number in YAML because a check compares it to another number in YAML. Check the mechanism, not the declaration. |
+| ❌ **Don't** | Write a path filter as `bundles/us1/*`. A single `*` does not cross `/`, so source changes stop triggering the deploy. Use the bare folder. *(CI check)* |
+| ❌ **Don't** | Put a `pr:` trigger block in YAML. Azure Repos ignores it; the filters belong on the branch policy. *(CI check)* |
 | ❌ **Don't** | Give `ci-pr-validation` a service connection. |
 
 ## Housekeeping

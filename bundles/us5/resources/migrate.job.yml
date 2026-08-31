@@ -1,0 +1,56 @@
+# us5: apply schema changes. Runs after deploy, before anything reads the tables.
+#
+# WHY THIS IS A SEPARATE JOB and not a task inside us5_curated:
+#   - it must run once per DEPLOY, not once per data load;
+#   - the CD pipeline runs it between `bundle deploy` and the smoke run, so a
+#     migration that fails stops the release before the gate to the next
+#     environment, not at 04:00 the following morning;
+#   - it is the one job a human may need to run by hand on a fresh environment.
+#
+# NO SCHEDULE. Nothing here should fire on a timer.
+
+resources:
+  jobs:
+    us5_migrate:
+      name: us5_migrate
+      description: "Create or evolve the us5 curated and datamart schema. Idempotent."
+
+      tags:
+        use_case: us5
+        layer: schema
+        managed_by: databricks_bundle
+        environment: ${var.env}
+
+      max_concurrent_runs: 1
+
+      email_notifications:
+        on_failure:
+          - ${var.alert_email}
+
+      parameters:
+        - name: env
+          default: ${var.env}
+        - name: use_case
+          default: us5
+        - name: catalog_prefix
+          default: ${var.catalog_prefix}
+        - name: schema_prefix
+          default: ${var.schema_prefix}
+        - name: bundle_target
+          default: ${bundle.target}
+
+      tasks:
+        - task_key: apply_migrations
+          notebook_task:
+            notebook_path: ../src/jobs/apply_migrations.py
+          environment_key: default
+          # No retries. A failed migration needs a human to read the error, not
+          # a second attempt at the same statement.
+          max_retries: 0
+
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ./dist/dab_common-*.whl

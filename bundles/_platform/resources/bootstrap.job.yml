@@ -48,6 +48,9 @@ resources:
           notebook_task:
             notebook_path: ../src/bootstrap_ops_framework.py
           environment_key: default
+          # DDL here is idempotent (CREATE ... IF NOT EXISTS), so a retry is
+          # safe and a transient metastore error should not fail a bootstrap.
+          max_retries: 2
 
       environments:
         - environment_key: default

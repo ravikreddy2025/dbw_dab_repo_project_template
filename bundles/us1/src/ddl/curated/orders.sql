@@ -3,14 +3,17 @@
 -- =============================================================================
 -- >>> PLACEHOLDER <<<
 --
--- Curated tables in this repo are created by the job that writes them
--- (saveAsTable with an explicit schema), so this file is a REFERENCE for what
--- the curated contract is - the shape downstream consumers may rely on.
+-- THIS FILE IS EXECUTED. us1_migrate runs it on every deploy, in every
+-- environment, before the curate job writes anything. It is not documentation.
 --
--- Use it two ways:
---   1. as the reviewed definition of the us1 curated contract;
---   2. as explicit DDL, if your team prefers create-then-insert over
---      saveAsTable. If you do, run it from a task ahead of the curate task.
+-- It owns the SHAPE of the curated table. curate.py writes DATA into it and
+-- deliberately does NOT pass overwriteSchema, so a transform that stops matching
+-- this contract fails loudly instead of silently redefining it.
+--
+-- CREATE TABLE IF NOT EXISTS means this file only ever builds a table that does
+-- not exist yet. Changing a line here has NO effect on an environment that
+-- already has the table - that needs a numbered file in ../migrations/, in the
+-- same pull request. See docs/04-bundle-authoring.md#changing-an-existing-table.
 --
 -- Written into: edp_curated_<env>.us1
 -- =============================================================================

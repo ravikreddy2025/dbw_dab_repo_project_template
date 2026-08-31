@@ -38,8 +38,6 @@ assert not ctx.is_sandbox, "The platform bundle must never run against a sandbox
 
 # COMMAND ----------
 
-# ops schema name -> DDL file. Kept in step with dab_common.config.OPS_SCHEMAS
-# by the assertion below, so adding a schema without its DDL fails loudly.
 # One or more DDL files per ops schema. Kept in step with
 # dab_common.config.OPS_SCHEMAS by the assertion below, so adding a schema
 # without its DDL fails loudly rather than producing a half-built ops catalog.
@@ -70,20 +68,22 @@ def split_statements(script: str) -> list[str]:
     return out
 
 
-for schema_name, ddl_file in DDL_FILES.items():
-    script = Path(f"/Workspace{notebook_dir}/{ddl_file}").read_text(encoding="utf-8")
+for schema_name, ddl_files in DDL_FILES.items():
+    # DDL_FILES values are LISTS - one ops schema can need several files.
+    for ddl_file in ddl_files:
+        script = Path(f"/Workspace{notebook_dir}/{ddl_file}").read_text(encoding="utf-8")
 
-    # Both values were validated by build_context(), so this substitution cannot
-    # inject anything a bundle variable did not already contain.
-    script = (
-        script.replace("{{catalog}}", ctx.catalog("ops"))
-              .replace("{{schema}}", ctx.ops_schema(schema_name))
-    )
+        # Both values were validated by build_context(), so this substitution cannot
+        # inject anything a bundle variable did not already contain.
+        script = (
+            script.replace("{{catalog}}", ctx.catalog("ops"))
+                  .replace("{{schema}}", ctx.ops_schema(schema_name))
+        )
 
-    print(f"\n--- {ddl_file} -> {ctx.catalog('ops')}.{ctx.ops_schema(schema_name)} ---")
-    for statement in split_statements(script):
-        print(f"  {statement.splitlines()[0][:100]}")
-        spark.sql(statement)
+        print(f"\n--- {ddl_file} -> {ctx.catalog('ops')}.{ctx.ops_schema(schema_name)} ---")
+        for statement in split_statements(script):
+            print(f"  {statement.splitlines()[0][:100]}")
+            spark.sql(statement)
 
 # COMMAND ----------
 

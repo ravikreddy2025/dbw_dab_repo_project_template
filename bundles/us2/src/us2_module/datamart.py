@@ -1,39 +1,29 @@
-"""us2 datamart-layer helpers.
+"""us2 datamart-layer content.
 
-Most of this layer is SQL in src/sql/. The Python here is limited to what a SQL
-task cannot do: audit writes, grants, and assertions. Pure functions returning
-SQL strings rather than executing them, so grant logic is unit-tested.
+WHAT THIS FILE IS FOR: the two things that are genuinely us2's.
+
+Everything else about publishing a mart - the reader groups per environment, the
+grant statements, the audit writes, the order they happen in - is platform policy
+and lives once in `dab_common.marts`. Policy in five files is policy that
+diverges the day someone adds an environment.
 """
 
 from __future__ import annotations
 
-from dab_common.config import RuntimeContext
+from dab_common.quality import non_negative, not_null, unique
 
 # The marts this use case owns. Adding one means adding it here AND adding the
 # .sql file - a test asserts the two stay in step, so neither can be forgotten.
 MART_TABLES = ("dim_customers", "fct_customers")
 
-# Groups granted SELECT on published marts, per environment. Schema-level grants
-# live in the _platform bundle; these are the table-level grants that can only be
-# applied once the table exists.
-READER_GROUPS = {
-    "nonprod": ("edp-developers",),
-    "preprod": ("edp-qa",),
-    "prod": ("edp-support", "edp-business-analysts"),
-}
+# The fact table the quality gate runs against.
+FACT_TABLE = "fct_customers"
 
-
-def reader_grant_statements(ctx: RuntimeContext) -> list[str]:
-    """GRANT SELECT statements for every mart in this environment.
-
-    Empty in a sandbox: a developer private mart should not be readable by the
-    whole team, and granting on it would clutter the metastore.
-    """
-    if ctx.is_sandbox:
-        return []
-
-    return [
-        f"GRANT SELECT ON TABLE {ctx.table('datamart', table)} TO `{group}`"
-        for group in READER_GROUPS.get(ctx.env, ())
-        for table in MART_TABLES
-    ]
+# >>> PLACEHOLDER: what "correct" means for us2. <<<
+# These are use-case knowledge, not framework - which is exactly why they stay
+# here while the machinery that runs them does not.
+MART_EXPECTATIONS = (
+    not_null("customers_id"),
+    unique("customers_id"),
+    non_negative("amount"),
+)

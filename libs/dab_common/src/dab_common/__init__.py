@@ -13,7 +13,21 @@ Every function needing a SparkSession takes it as its first argument, and all
 SQL construction is pure so it can be asserted in plain pytest.
 """
 
-from dab_common.config import RuntimeContext, build_context, ensure_ops_schema, ensure_schema
+from dab_common.config import (
+    RuntimeContext,
+    build_context,
+    current_user_prefix,
+    ensure_ops_schema,
+    ensure_schema,
+    interactive_context,
+)
 
-__all__ = ["RuntimeContext", "build_context", "ensure_schema", "ensure_ops_schema"]
+__all__ = [
+    "RuntimeContext",
+    "build_context",
+    "current_user_prefix",
+    "ensure_ops_schema",
+    "ensure_schema",
+    "interactive_context",
+]
 __version__ = "0.4.0"

@@ -48,7 +48,18 @@ with audited_run(spark, ctx, layer="curated"):
     # carry the same record twice. Latest event_ts wins.
     curated = dedupe_by_key(curated, keys=["inventory_id"], order_by="event_ts")
 
-    curated.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(target)
+    # NO overwriteSchema. The table is created and evolved by us4_migrate from
+    # src/ddl/curated/inventory.sql and src/ddl/migrations/ - this job writes DATA.
+    #
+    # With overwriteSchema=true this line silently replaced the declared contract
+    # with whatever shape the DataFrame happened to have: column comments and NOT
+    # NULL gone, and any applied migration undone while ops.config.schema_migration
+    # still claimed it had been applied.
+    #
+    # Without it, a transform that no longer matches the contract FAILS HERE. That
+    # is the intended signal: a shape change needs a migration, not a silent
+    # rewrite. See docs/04-bundle-authoring.md#changing-an-existing-table.
+    curated.write.mode("overwrite").saveAsTable(target)
     rows = spark.table(target).count()
 
     record_table_load(

@@ -37,3 +37,28 @@ CREATE TABLE IF NOT EXISTS {{catalog}}.{{schema}}.landing_watermark (
 )
 USING DELTA
 COMMENT 'High-water marks. Advanced only after a successful commit, and never backwards.';
+
+-- -----------------------------------------------------------------------------
+-- Schema migration history. One row per migration file, per environment.
+-- -----------------------------------------------------------------------------
+-- Written by each use case's <uc>_migrate job. This is what makes a migration
+-- run ONCE: the job asks this table what it has already done. It is also the
+-- only place that records what shape an environment is actually in, which is
+-- the question you need answered when preprod and prod disagree.
+--
+-- In a sandbox this table is prefixed like everything else, so a developer's
+-- experiments never claim a migration was applied to the shared environment.
+CREATE TABLE IF NOT EXISTS {{catalog}}.{{schema}}.schema_migration (
+  use_case      STRING    NOT NULL COMMENT 'us1..us5. Migrations are numbered per use case.',
+  version       INT       NOT NULL COMMENT 'Ordering key parsed from the filename.',
+  name          STRING    NOT NULL COMMENT 'Description parsed from the filename.',
+  filename      STRING    NOT NULL COMMENT 'V007__add_settlement_currency.sql',
+  checksum      STRING    NOT NULL COMMENT 'Content hash. A change here means an applied migration was edited.',
+  statements    INT                COMMENT 'How many statements the file contained.',
+  applied_at    TIMESTAMP NOT NULL DEFAULT current_timestamp(),
+  applied_by    STRING             COMMENT 'The identity that ran it - run-as SP, or a developer in a sandbox.',
+  bundle_target STRING             COMMENT 'dev | nonprod | preprod | prod. Which deployment applied it.'
+)
+USING DELTA
+COMMENT 'Applied schema migrations. Append-only; never edit or delete a row.'
+TBLPROPERTIES (delta.enableChangeDataFeed = true);

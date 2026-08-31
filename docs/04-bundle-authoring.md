@@ -48,6 +48,51 @@ a new file under `resources/` needs no wiring — the glob picks it up.
 
 ---
 
+### What lives in `src/`, and why it is all `.py`
+
+```
+src/
+├─ jobs/           notebooks run by a JOB task        (notebook_task)
+├─ pipelines/      source for a declarative PIPELINE  (pipeline resource)
+├─ <uc>_module/    importable library code            (built into a wheel)
+├─ ddl/            SQL — see §7
+└─ ported/         lift-and-shift code, not yet refactored
+```
+
+**`jobs/` and `pipelines/` are notebooks.** Every file there starts with
+
+```python
+# Databricks notebook source
+```
+
+which is what makes a `.py` file a notebook to Databricks — cells are separated
+by `# COMMAND ----------` and markdown by `# MAGIC %md`. It is the **source
+format** of a notebook, not a different thing.
+
+We use it instead of `.ipynb` because a `.py` notebook diffs, reviews, lints and
+merges like code. An `.ipynb` is JSON with embedded outputs: every run changes
+the file, review is unreadable, and merge conflicts are unresolvable.
+
+**`jobs/` vs `pipelines/` is not stylistic — they are different resource types.**
+
+| | `src/jobs/` | `src/pipelines/` |
+|---|---|---|
+| Referenced by | `notebook_task.notebook_path` | a `pipelines:` resource's `libraries` |
+| Executes | top to bottom, once | continuously, as a dataflow graph |
+| You write | imperative code | `@dlt.table` definitions |
+| Owns its tables | no | **yes** — the pipeline creates and manages them |
+
+The last row matters: a declarative pipeline owns the lifecycle of the tables it
+declares, so those tables are **not** in `src/ddl/` and are not migrated by
+`<uc>_migrate`. Changing them means changing the `@dlt.table` definition.
+[`kafka_landing.py`](../bundles/landing/src/pipelines/kafka_landing.py) is the
+example.
+
+**`<uc>_module/` is not a notebook.** No magic header, plain importable Python,
+unit tested without Spark. Logic goes here; `jobs/` just wires it up.
+
+---
+
 ## 2. Adding a job
 
 Create `resources/<name>.job.yml`:
@@ -111,6 +156,24 @@ from dab_common.config import build_context
 ctx = build_context(dbutils.widgets.getAll())
 ```
 
+### Every task states a retry policy
+
+An unset `max_retries` is a decision nobody made. This repo had ten `sql_task`s
+with no retry policy sitting beside notebook tasks in the *same job* that had
+one — so a transient warehouse blip failed the whole mart build while the task
+after it would have retried.
+
+| Task | Policy | Why |
+|---|---|---|
+| Produces data | `max_retries: ${var.max_retries}` | Cluster and warehouse blips are transient and real |
+| Quality gate | `max_retries: 0` | Checking bad data twice returns the same bad data |
+| Migration | `max_retries: 0` | A failed migration needs a human to read the error |
+| `pipeline_task` | **omit** | The declarative pipeline owns its own retry policy |
+| `for_each_task` | **omit** — set it on the **nested** task | The fan-out itself cannot fail transiently |
+
+`check_retry_policy_is_explicit` fails the build on any task that fits none of
+these. It is not asking you to retry — it is asking you to decide.
+
 ### The five base parameters are not optional
 
 `dab_common.config.build_context()` reads them, and everything downstream — table
@@ -146,8 +209,38 @@ Three styles are in this repo. Pick by workload shape.
 ```
 
 Use when the job is short or bursty. No cluster to size, no startup to wait for, no
-policy to comply with. [`curation.job.yml`](../bundles/us1/resources/curated.job.yml)
-is the example.
+policy to comply with. [`us1 curated.job.yml`](../bundles/us1/resources/curated.job.yml)
+is the example — and us3, us4, us5 are the same.
+
+### The same job, both ways
+
+[`us2 curated.job.yml`](../bundles/us2/resources/curated.job.yml) is deliberately
+the **classic-compute twin** of the us1 file. Same tasks, same parameters, same
+notebooks — so the diff between them is exactly the difference between the two
+styles and nothing else:
+
+| | serverless (us1) | classic (us2) |
+|---|---|---|
+| Task binding | `environment_key: default` | `job_cluster_key: curated_etl` |
+| Wheels | `environments[].spec.dependencies` | `libraries[]` on **each** task |
+| Cluster | none declared | `job_clusters[].new_cluster` |
+| Policy | n/a | `policy_id` from a `lookup` |
+| Runtime version | managed for you | `spark_version` pinned by you |
+| Sizing per env | n/a | `min_workers` / `max_workers` / `runtime_engine` |
+| Cost tags | job tags | plus `custom_tags` on the VMs |
+
+**Reach for classic when you need something serverless cannot give you**: a JDBC
+driver JAR, a fixed egress identity a DBA can allow-list, an init script, GPUs,
+a specific Spark version, or a long run where startup is noise. us2 is classic
+because its source is Oracle. That is the whole reason — not preference.
+
+Two things people get wrong on classic:
+
+- **Pin `spark_version`.** "Latest LTS" is not a version. The same commit would
+  deploy a different Spark to preprod next month than the one QA signed off, and
+  a runtime upgrade arrives unannounced.
+- **Share one job cluster across tasks** (`job_cluster_key` on both). A cluster
+  per task means paying startup twice for a job whose second task takes seconds.
 
 ### Job cluster + policy
 
@@ -196,10 +289,16 @@ Use for set-based SQL that produces tables.
 In the `.sql` file, bind parameters — never concatenate:
 
 ```sql
-CREATE OR REPLACE TABLE
-  IDENTIFIER(:catalog || '.' || :schema || '.fct_orders')
-AS SELECT ...
+INSERT OVERWRITE IDENTIFIER(:catalog || '.' || :schema || '.fct_orders')
+BY NAME
+SELECT ...
 ```
+
+**Not `CREATE OR REPLACE TABLE`.** The table is created and evolved by
+`<uc>_migrate` from `src/ddl/`; a SQL task writes DATA into it. `CREATE OR
+REPLACE` would rebuild the table nightly from this SELECT and discard the
+declared shape — along with any applied migration, while the history table went
+on claiming it had been applied. `check_no_schema_clobber` rejects it.
 
 `IDENTIFIER()` is what lets a bound parameter form part of an object name. A plain
 `:param` cannot appear where SQL expects an identifier.
@@ -373,9 +472,118 @@ from dab_common.config import ensure_schema
 ensure_schema(spark, ctx, "curated")
 ```
 
-Tables are created by jobs, not declared as bundle resources — except the `ops.*`
-tables, whose DDL is applied by the platform bootstrap job so that a schema change
-reaches all three environments the same way code does.
+**Tables are never bundle resources.** They are created by SQL that a job runs.
+There are exactly three places that SQL lives, and they run at different times:
+
+| SQL | Where | Run by | When |
+|---|---|---|---|
+| `ops.*` tables | `bundles/_platform/src/ddl/` | `platform_bootstrap_ops` job | once per environment, and on any platform deploy |
+| Current shape of a use case's tables | `bundles/<uc>/src/ddl/curated/`, `.../datamart/` | `<uc>_migrate` job | **every deploy**, all environments |
+| Ordered changes to existing tables | `bundles/<uc>/src/ddl/migrations/` | `<uc>_migrate` job | **every deploy**, once each, recorded |
+
+`<uc>_migrate` runs from the CD pipeline between `bundle deploy` and the smoke
+run — see
+[`bundle-deploy.yml`](../.azure-pipelines/templates/steps/bundle-deploy.yml).
+That ordering is deliberate: a deploy publishes job *definitions* and touches no
+table, so without this step a release that adds a column would deploy green and
+then fail at 04:00 in an environment nobody is watching.
+
+---
+
+<a name="changing-an-existing-table"></a>
+
+## 7a. Changing an existing table
+
+`CREATE TABLE IF NOT EXISTS` builds a **new** environment. It does nothing to one
+that already has the table. So an added column behaves like this:
+
+| | |
+|---|---|
+| your fresh sandbox | table created **with** the new column → works |
+| preprod | table already exists, unchanged → **fails** |
+| prod | table already exists, unchanged → **fails** |
+
+...and it fails after the approval gate, on the environment you cannot iterate on.
+
+### While you are iterating — do nothing
+
+A sandbox schema is yours and disposable:
+
+```sql
+DROP TABLE IF EXISTS edp_curated_nonprod.jsmith_us1.orders;
+```
+
+Rerun the job. No migration, no ceremony. Write the migration when the change is
+going somewhere that already has the table — which means **when you open the PR**.
+
+### Adding a column
+
+Two files, one PR:
+
+```sql
+-- src/ddl/migrations/V007__add_orders_currency.sql   (the change)
+ALTER TABLE IDENTIFIER(:catalog || '.' || :schema || '.orders')
+  ADD COLUMN IF NOT EXISTS currency STRING COMMENT 'ISO-4217.';
+```
+
+```sql
+-- src/ddl/curated/orders.sql                          (the shape, so a NEW
+--                                                      environment gets it too)
+    currency STRING COMMENT 'ISO-4217.',
+```
+
+Both, or the two paths diverge: fresh environments get one schema and existing
+ones get another, and nothing reports it.
+
+### Changing a column type
+
+Delta will not rewrite a type in place. `ALTER COLUMN ... TYPE` only **widens**
+(`INT`→`BIGINT`, `FLOAT`→`DOUBLE`). Anything else is four steps across two
+releases:
+
+```sql
+-- V008__add_orders_amount_decimal.sql        release N
+ALTER TABLE ... ADD COLUMN IF NOT EXISTS amount_v2 DECIMAL(18,2);
+UPDATE ... SET amount_v2 = CAST(amount AS DECIMAL(18,2)) WHERE amount_v2 IS NULL;
+
+-- ... readers move to amount_v2, ship it, confirm nothing reads `amount` ...
+
+-- V011__drop_orders_amount_double.sql        release N+1
+ALTER TABLE ... DROP COLUMN amount;
+ALTER TABLE ... RENAME COLUMN amount_v2 TO amount;
+```
+
+`DROP` and `RENAME COLUMN` need column mapping enabled on the table:
+
+```sql
+ALTER TABLE ... SET TBLPROPERTIES ('delta.columnMapping.mode' = 'name');
+```
+
+The one-step alternative — rewriting the table with `overwriteSchema` — is
+**rejected by `check_no_schema_clobber`** in this repo, because it discards the
+declared shape and silently undoes applied migrations. If you genuinely want it
+for a table nothing depends on yet, drop the table and let the shape DDL rebuild
+it; do not reach for `overwriteSchema` in a job.
+
+### The rules the tooling enforces
+
+`V<digits>__<lower_snake_case>.sql`, and the PR audit plus the job both refuse:
+
+| Refused | Because |
+|---|---|
+| Bad filename | Ordering has to be unambiguous |
+| Duplicate version | Two branches used V007; the second to merge would apply in an order nobody chose |
+| Out-of-order arrival | V005 pending while V006 is applied — a stale branch merged late, and V005 was written against a schema that no longer exists |
+| Applied file edited afterwards | Two environments ran different text. Checksum drift. Fix forward |
+| Applied file deleted | A migration that has run is a historical record |
+
+Gaps in numbering are fine. Reserve a number when you start.
+
+### There is no rollback
+
+Delta has no transactional DDL, so "down" migrations are a comfortable fiction.
+The recovery path is a **new forward migration**, or `RESTORE TABLE ... TO
+VERSION AS OF`. Write migrations you would be willing to run twice.
 
 ---
 

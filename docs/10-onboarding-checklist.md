@@ -18,7 +18,7 @@ Copy the relevant block into the onboarding work item.
 
 ### Day one (the developer)
 
-- [ ] `winget install Databricks.DatabricksCLI`, confirm `databricks --version` ≥ 0.240.0
+- [ ] `winget install Databricks.DatabricksCLI`, confirm `databricks --version` ≥ 1.14.0
 - [ ] Python 3.11 installed
 - [ ] Repo cloned
 - [ ] `python -m venv .venv` and `pip install -r requirements-dev.txt`

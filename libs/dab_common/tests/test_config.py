@@ -8,6 +8,8 @@ from dab_common.config import (
     ConfigError,
     RuntimeContext,
     build_context,
+    current_user_prefix,
+    interactive_context,
     validate_identifier,
 )
 
@@ -287,3 +289,47 @@ def test_sample_is_a_no_op_when_unset():
 def test_sample_of_zero_disables_the_cap():
     ctx = build_context({**SANDBOX, "dev_sample_rows": "0"})
     assert ctx.sample(_FakeDF()).limited is None
+
+
+# ---------------------------------------------------------------------------
+# interactive_context - the notebook inner loop, where no job parameters exist
+# ---------------------------------------------------------------------------
+def test_current_user_prefix_matches_the_bundle_and_the_powershell():
+    # All three derivations must agree or a developer tears down the wrong sandbox.
+    assert current_user_prefix(user="jsmith@contoso.com") == "jsmith_"
+    assert current_user_prefix(user="j.smith@contoso.com") == "j_smith_"
+    assert current_user_prefix(user="sp-runner") == "sp_runner_"
+
+
+def test_current_user_prefix_survives_a_leading_digit():
+    assert current_user_prefix(user="7up@contoso.com") == "u_7up_"
+
+
+def test_interactive_context_isolates_writes_by_default():
+    ctx = interactive_context("us1", user="jsmith@contoso.com")
+    assert ctx.is_sandbox
+    assert ctx.table("curated", "orders") == "edp_curated_nonprod.jsmith_us1.orders"
+    # Reads stay shared even in an isolated interactive session.
+    assert ctx.upstream("landing", "orders") == "edp_landing_nonprod.us1.orders"
+
+
+def test_interactive_context_isolated_false_writes_shared():
+    ctx = interactive_context("us1", isolated=False)
+    assert not ctx.is_sandbox
+    assert ctx.table("curated", "orders") == "edp_curated_nonprod.us1.orders"
+    assert ctx.upstream("landing", "orders") == "edp_landing_nonprod.us1.orders"
+
+
+def test_interactive_context_explicit_prefix_wins_over_isolated():
+    ctx = interactive_context("us1", isolated=True, schema_prefix="shared_test_")
+    assert ctx.table("curated", "orders") == "edp_curated_nonprod.shared_test_us1.orders"
+
+
+def test_interactive_context_refuses_prod():
+    with pytest.raises(ConfigError, match="Refusing to build an interactive context"):
+        interactive_context("us1", env="prod", user="jsmith@contoso.com")
+
+
+def test_interactive_context_allows_reading_preprod():
+    ctx = interactive_context("us1", env="preprod", isolated=False)
+    assert ctx.upstream("curated", "orders") == "edp_curated_preprod.us1.orders"

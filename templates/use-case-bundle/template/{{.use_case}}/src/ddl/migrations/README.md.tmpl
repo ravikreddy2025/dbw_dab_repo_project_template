@@ -1,0 +1,44 @@
+# `{{.use_case}}` schema migrations
+
+Ordered, once-only changes to tables that **already exist** in an environment.
+
+`../curated/` and `../datamart/` describe the CURRENT SHAPE with
+`CREATE TABLE IF NOT EXISTS` — they build a new environment and do nothing to a
+populated one. That is the problem this folder solves: the day you add a column,
+a fresh sandbox gets it and preprod does not.
+
+## Start here
+
+`EXAMPLE__add_column.sql.example` is a complete, annotated migration. It ends
+in `.example`, so neither the job (`V*.sql`) nor the PR audit sees it. Copy it
+and rename:
+
+```bash
+cp EXAMPLE__add_column.sql.example V002__add_currency.sql
+```
+
+**There is no V001.** The initial table shape lives in `../curated/`, so the
+first migration is whatever the first *change* turns out to be. An empty
+folder is the correct state for a use case nobody has changed yet.
+
+## Naming
+
+```
+V007__add_settlement_currency.sql
+```
+
+`V<digits>__<lower_snake_case>.sql`. `{{.use_case}}_migrate` and the PR
+cross-reference audit both refuse a bad name, a duplicate version, a migration
+arriving out of order, or an applied file that was edited afterwards.
+
+## Rules
+
+- One logical change per file, idempotent (`ADD COLUMN IF NOT EXISTS`).
+- Update the shape DDL in `../curated/` in the **same PR**.
+- Never edit or renumber a file after it has merged. Fix forward.
+- No `DROP COLUMN` on anything with readers — deprecate, migrate, drop later.
+
+In your own sandbox you need none of this: drop the table and rerun.
+
+Full guidance, including how to change a column type:
+`docs/04-bundle-authoring.md`.

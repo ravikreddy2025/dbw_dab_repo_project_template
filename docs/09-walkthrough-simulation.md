@@ -19,7 +19,7 @@ Jaya joined this morning, on the us2 team. Priya sends her
 ```bash
 winget install Databricks.DatabricksCLI
 databricks --version
-# Databricks CLI v0.240.0
+# Databricks CLI v1.14.1
 ```
 
 ```bash
@@ -45,7 +45,7 @@ pwsh ./scripts/dev/Deploy-Sandbox.ps1 -Bundle us2
 ```
 
 ```
-Databricks CLI: Databricks CLI v0.240.0
+Databricks CLI: Databricks CLI v1.14.1
 Building dab_common -> bundles\us2\dist
     dab_common-0.4.0-py3-none-any.whl
 Validating bundles\us2 against target 'dev'...

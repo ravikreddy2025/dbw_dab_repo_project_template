@@ -66,6 +66,67 @@ But the prefix applies to **writes only**. Upstream reads resolve to the shared
 schema, because a prefixed read would hit an empty sandbox schema and silently
 produce nothing. See [03 §4a](03-developer-guide.md#reading-shared-data).
 
+### If everyone writes to their own schema, how does QA validate?
+
+**QA never looks at a sandbox.** Sandboxes exist only on the `dev` bundle target,
+which is only ever deployed from a laptop. Every shared target — `nonprod`,
+`preprod`, `prod` — sets `schema_prefix: ""`.
+
+So the environments QA cares about have exactly one copy of each table, written by
+the run-as service principal:
+
+| Where | Written by | Prefix | Who uses it |
+|---|---|---|---|
+| `jsmith_us1` in nonprod | jsmith, from a laptop | `jsmith_` | jsmith. Throwaway. |
+| `us1` in nonprod | run-as SP, CD from `main` | none | team integration |
+| `us1` in preprod | run-as SP, CD from `release/*` | none | **QA validates here** |
+| `us1` in prod | run-as SP, CD from `release/*` | none | the business |
+
+### Does QA have to load the tables again?
+
+No. Nobody hand-loads anything for QA.
+
+`cd-landing` and the use-case pipelines deploy to preprod, and the **same jobs**
+run there against preprod sources. Preprod gets its data the way prod does — by
+running the pipeline — which is the point: if the load only works because someone
+ran it by hand, you have not tested the thing you are shipping.
+
+What QA does need is for preprod to *have* sources: a copy, a subset, or a
+pointer at the same upstream system. That is a data-provisioning decision, made
+once per environment, and it has nothing to do with sandbox prefixes.
+
+Reconciliation then runs in preprod with `upstream_mode: shared`, comparing the
+unprefixed preprod tables against the legacy side. See
+[13 — Migration and cutover](13-migration-and-cutover.md).
+
+### Can we turn the sandbox prefix off?
+
+Yes — it is a parameter, not a rule.
+
+```python
+ctx = interactive_context("us1", isolated=False)     # notebook
+```
+```bash
+databricks bundle deploy --target dev --var schema_prefix=
+```
+
+It is safe to work this way because developers hold `SELECT`, not `MODIFY`, on
+shared schemas — an unprefixed write fails with a permission error rather than
+corrupting a shared table. Turn it on when two people work the same use case at
+once, or when you are testing something destructive.
+
+The trade-off is described in
+[03 §4b](03-developer-guide.md#4b-the-interactive-loop--before-any-bundle-exists).
+
+### Do I have to deploy a bundle to develop?
+
+No, and normally you should not. The inner loop is a notebook on a running
+cluster; `interactive_context()` gives it the same read/write rules a deployed
+job has. **The bundle is how a job gets scheduled, not how you write it.**
+
+Deploy to your sandbox when you want to check the *job definition* — parameters,
+task graph, cluster, permissions — end to end before you open a PR.
+
 ### Do I have to copy upstream data into my sandbox to test?
 
 No, and you should not. `ctx.upstream(...)` reads the shared schema directly:
@@ -109,6 +170,19 @@ AS SELECT * FROM edp_landing_nonprod.us1.ora_customers LIMIT 100000;
 
 Preprod is the place where full-volume behaviour is verified, and it is sized like
 prod for exactly that reason.
+
+---
+
+### Where do the PowerShell scripts run? Not in Databricks?
+
+Correct — Databricks never runs PowerShell. `scripts/dev/` runs on your laptop and
+calls the Databricks CLI; `scripts/setup/` runs once on an admin's machine and
+calls `az`; `scripts/ci/` is Python and runs on the build agent.
+
+Only `scripts/ci/` is load-bearing. `scripts/dev/` is convenience — each script is
+a handful of `databricks` commands, listed in
+[03 §4c](03-developer-guide.md#4c-where-do-these-powershell-scripts-run). Delete
+them if your team is not on Windows; nothing in CI depends on them.
 
 ---
 

@@ -49,15 +49,17 @@ IDs — every one marked `# PLACEHOLDER`.
 ```
 bundles/
   _platform/    4 catalogs x 3 envs, all schemas, volumes, scopes, ops DDL  [FIRST]
-  landing/      SHARED - Kafka (us1/us3/us4) + Oracle (us2) -> edp_landing_<env>.<uc>
-  us1/ .. us5/  curated + datamart + reconciliation, one bundle per use case
+  landing/      SHARED - Kafka (us1/us3/us4/us5) + Oracle (us2) -> edp_landing_<env>.<uc>
+  recon/        SHARED, QA-OWNED - parity definitions, one job per use case
+  us1/ .. us5/  curated + datamart, one bundle per use case
 libs/
-  dab_common/   config, audit, quality, recon    <- every bundle depends on this
-  edp_landing/  registry, kafka, oracle          <- the landing framework
+  dab_common/   config, audit, quality, migrate, marts  <- every bundle
+  edp_landing/  registry, kafka, oracle                 <- the landing bundle only
+  edp_recon/    parity framework                        <- the recon bundle only
 .azure-pipelines/  ci-pr-validation + one cd-* per bundle
 scripts/           dev commands, one-time ADO bootstrap, CI audits
 templates/         `bundle init` scaffold for a new use case
-docs/              the team reference — 15 documents
+docs/              the team reference — 17 documents
 ```
 
 ### The catalog model

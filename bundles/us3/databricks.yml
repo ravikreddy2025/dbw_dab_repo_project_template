@@ -23,7 +23,7 @@
 
 bundle:
   name: edp_us3
-  databricks_cli_version: ">=0.240.0"
+  databricks_cli_version: ">=1.14.0"
 
 include:
   - variables.yml
