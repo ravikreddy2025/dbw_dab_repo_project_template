@@ -206,6 +206,10 @@ from dab_common import interactive_context
 ctx = interactive_context("us1")
 # [SANDBOX] writes -> edp_curated_nonprod.jsmith_us1 | reads -> edp_landing_nonprod.us1 (shared)
 
+# You never pass an environment. It is DETECTED from the workspace you are
+# attached to - one workspace per environment, mapped in one file. Open the same
+# notebook against preprod and every name above resolves to preprod.
+
 df = spark.table(ctx.upstream("landing", "orders"))     # shared, real data
 df.write.saveAsTable(ctx.table("curated", "orders"))    # yours
 ```

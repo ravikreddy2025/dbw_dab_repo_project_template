@@ -434,33 +434,80 @@ def check_shared_shims() -> None:
 
 
 def check_target_consistency() -> None:
-    """Every bundle must agree on what each target IS."""
-    reference: dict[str, dict] = {}
-    source: dict[str, str] = {}
+    """Grade every bundle target against libs/dab_common/.../environments.yml.
+
+    Targets stay hand-written - that was the explicit choice over generating
+    them - so this is what stops them drifting. environments.yml is the source
+    of truth; a databricks.yml that disagrees fails the PR rather than deploying
+    a bundle into the wrong workspace.
+    """
+    import sys
+
+    sys.path.insert(0, str(REPO / "libs" / "dab_common" / "src"))
+    try:
+        from dab_common.environments import clear_cache, environments, load_config
+    except ImportError:
+        err("cannot import dab_common.environments - is environments.yml present?")
+        return
+
+    clear_cache()
+    envs = environments()
+    declared_targets = load_config().get("targets") or {}
+
+    def host_of(name: str) -> str:
+        return envs[declared_targets[name]["environment"]].workspace_host
 
     for db in sorted(BUNDLES.glob("*/databricks.yml")):
         try:
             doc = yaml.safe_load(db.read_text(encoding="utf-8")) or {}
         except yaml.YAMLError:
             continue
+
+        found = set()
         for name, target in (doc.get("targets") or {}).items():
-            workspace = target.get("workspace") or {}
-            shape = {
-                "mode": target.get("mode"),
-                "host": workspace.get("host"),
-                "root_path": workspace.get("root_path"),
-            }
-            if name not in reference:
-                reference[name], source[name] = shape, rel(db)
+            found.add(name)
+            if name not in declared_targets:
+                err(
+                    f"{rel(db)}: target '{name}' is not declared in "
+                    "environments.yml. Add it there first."
+                )
                 continue
-            for key, value in shape.items():
-                if reference[name][key] != value:
-                    err(
-                        f"{rel(db)}: target '{name}' has {key}={value!r} but "
-                        f"{source[name]} has {reference[name][key]!r}. Every bundle "
-                        "must agree on what a target is - DABs cannot share this, "
-                        "so it is checked here instead."
-                    )
+
+            spec = declared_targets[name]
+            workspace = target.get("workspace") or {}
+
+            if workspace.get("host") != host_of(name):
+                err(
+                    f"{rel(db)}: target '{name}' points at "
+                    f"{workspace.get('host')!r}, but environments.yml says "
+                    f"{host_of(name)!r}. One of them deploys somewhere nobody meant."
+                )
+            if target.get("mode") != spec["mode"]:
+                err(
+                    f"{rel(db)}: target '{name}' has mode={target.get('mode')!r}, "
+                    f"environments.yml says {spec['mode']!r}"
+                )
+
+            declared_env = (target.get("variables") or {}).get("env")
+            if declared_env is not None and declared_env != spec["environment"]:
+                err(
+                    f"{rel(db)}: target '{name}' sets env={declared_env!r} but "
+                    f"deploys to the {spec['environment']!r} workspace. The job "
+                    "would resolve catalogs for an environment it is not in."
+                )
+
+        # _platform is the one bundle a developer never deploys: catalogs and
+        # grants are environment-scoped, not developer-scoped, and a sandbox
+        # copy of them would be meaningless. Every other bundle needs all four.
+        expected = set(declared_targets)
+        if db.parent.name == "_platform":
+            expected.discard("dev")
+
+        for missing in sorted(expected - found):
+            err(
+                f"{rel(db)}: no '{missing}' target. Every bundle must be "
+                "deployable to every environment it is graded against."
+            )
 
 
 # ---------------------------------------------------------------------------

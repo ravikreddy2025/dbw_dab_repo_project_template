@@ -306,7 +306,7 @@ def test_current_user_prefix_survives_a_leading_digit():
 
 
 def test_interactive_context_isolates_writes_by_default():
-    ctx = interactive_context("us1", user="jsmith@contoso.com")
+    ctx = interactive_context("us1", env="nonprod", user="jsmith@contoso.com")
     assert ctx.is_sandbox
     assert ctx.table("curated", "orders") == "edp_curated_nonprod.jsmith_us1.orders"
     # Reads stay shared even in an isolated interactive session.
@@ -314,14 +314,14 @@ def test_interactive_context_isolates_writes_by_default():
 
 
 def test_interactive_context_isolated_false_writes_shared():
-    ctx = interactive_context("us1", isolated=False)
+    ctx = interactive_context("us1", env="nonprod", isolated=False)
     assert not ctx.is_sandbox
     assert ctx.table("curated", "orders") == "edp_curated_nonprod.us1.orders"
     assert ctx.upstream("landing", "orders") == "edp_landing_nonprod.us1.orders"
 
 
 def test_interactive_context_explicit_prefix_wins_over_isolated():
-    ctx = interactive_context("us1", isolated=True, schema_prefix="shared_test_")
+    ctx = interactive_context("us1", env="nonprod", isolated=True, schema_prefix="shared_test_")
     assert ctx.table("curated", "orders") == "edp_curated_nonprod.shared_test_us1.orders"
 
 
@@ -333,3 +333,10 @@ def test_interactive_context_refuses_prod():
 def test_interactive_context_allows_reading_preprod():
     ctx = interactive_context("us1", env="preprod", isolated=False)
     assert ctx.upstream("curated", "orders") == "edp_curated_preprod.us1.orders"
+
+
+def test_interactive_context_refuses_to_guess_without_a_workspace():
+    # No workspace to ask and no env passed: raise. Defaulting to nonprod is how
+    # a notebook opened in preprod quietly reads and writes the wrong catalog.
+    with pytest.raises(ConfigError, match="Could not determine the workspace"):
+        interactive_context("us1")

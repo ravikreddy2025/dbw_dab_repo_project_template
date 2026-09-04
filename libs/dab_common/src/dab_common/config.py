@@ -318,7 +318,12 @@ class RuntimeContext:
         }
 
 
-def build_context(params: dict[str, str] | None = None, **overrides: str) -> RuntimeContext:
+def build_context(
+    params: dict[str, str] | None = None,
+    *,
+    verify_workspace: bool = True,
+    **overrides: str,
+) -> RuntimeContext:
     """Build a RuntimeContext from a plain dict of job parameters.
 
     Kept dict-in / object-out so unit tests never need dbutils. Notebook entry
@@ -326,6 +331,10 @@ def build_context(params: dict[str, str] | None = None, **overrides: str) -> Run
 
     Any parameter named `catalog_<layer>` becomes an explicit catalog override,
     for the case where an existing catalog does not follow the naming convention.
+
+    `verify_workspace` cross-checks the declared environment against the
+    workspace actually running the job, and raises if they disagree. Pass False
+    only where that comparison is meaningless - never to silence it.
     """
     merged: dict[str, str] = dict(params or {})
     merged.update({k: v for k, v in overrides.items() if v is not None})
@@ -349,6 +358,17 @@ def build_context(params: dict[str, str] | None = None, **overrides: str) -> Run
         "job_id", "run_id", "task_key",
         *(f"catalog_{layer}" for layer in LAYERS),
     }
+
+    # A job DECLARES its environment through a bundle variable. The workspace it
+    # is running in also knows. When both are available and they disagree, the
+    # bundle was deployed to the wrong workspace - and without this it would run
+    # to completion, writing to the catalogs of an environment it is not in.
+    #
+    # Skipped silently when there is no workspace to ask: that is a unit test,
+    # not a misconfiguration.
+    if verify_workspace:
+        _verify_declared_environment(merged["env"].strip())
+
     return RuntimeContext(
         env=merged["env"].strip(),
         use_case=merged["use_case"].strip(),
@@ -394,7 +414,7 @@ def current_user_prefix(user: str | None = None, spark=None) -> str:
 
 def interactive_context(
     use_case: str,
-    env: str = "nonprod",
+    env: str | None = None,
     isolated: bool = True,
     user: str | None = None,
     spark=None,
@@ -410,6 +430,11 @@ def interactive_context(
         ctx = interactive_context("us1")                    # writes <you>_us1
         ctx = interactive_context("us1", isolated=False)    # writes shared us1
 
+    `env` is DETECTED from the workspace you are attached to - one workspace per
+    environment, mapped in environments.yml. You never type it, so it cannot be
+    wrong, and a notebook opened in preprod does not quietly read nonprod.
+    Passing it explicitly still works and is what unit tests do.
+
     `isolated=False` is the escape hatch, and it is a safe habit ONLY because
     developers hold SELECT (not MODIFY) on shared schemas: an accidental write
     fails with a permission error instead of corrupting a shared table. If you
@@ -421,6 +446,11 @@ def interactive_context(
     Interactive access to prod is refused. Read prod with a SELECT if you must;
     do not build something that can write to it from a notebook.
     """
+    if env is None:
+        from dab_common.environments import require_environment
+
+        env = require_environment(spark).name
+
     if env == "prod":
         raise ConfigError(
             "Refusing to build an interactive context for prod. Nothing should "
@@ -443,6 +473,37 @@ def interactive_context(
         f"reads   -> {ctx.catalog('landing')}.{use_case} (shared)"
     )
     return ctx
+
+
+def _verify_declared_environment(declared: str) -> None:
+    """Raise if the declared environment is not the one we are running in.
+
+    Best effort by design. No workspace to ask means a unit test, and a unit
+    test has nothing to verify against - so it returns quietly. A workspace that
+    IS reachable but disagrees is a real, dangerous misconfiguration and raises.
+    """
+    try:
+        from dab_common.environments import detect_environment
+    except ImportError:      # environments.yml missing from a partial install
+        return
+
+    try:
+        actual = detect_environment()
+    except ConfigError:
+        # An undeclared workspace. environments.py already raised a good error
+        # for anyone who asked it directly; do not turn every job into that
+        # failure just because it happened to call build_context.
+        return
+
+    if actual is None or actual.name == declared:
+        return
+
+    raise ConfigError(
+        f"This job declares env={declared!r} but is running in the "
+        f"{actual.name!r} workspace ({actual.workspace_host}). That means the "
+        "bundle was deployed to the wrong target. Refusing to run: it would "
+        f"read and write {declared} catalogs from the {actual.name} workspace."
+    )
 
 
 def ensure_schema(spark, ctx: RuntimeContext, layer: str) -> str:

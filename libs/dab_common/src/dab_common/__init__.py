@@ -21,11 +21,14 @@ from dab_common.config import (
     ensure_schema,
     interactive_context,
 )
+from dab_common.environments import Environment, detect_environment
 
 __all__ = [
     "RuntimeContext",
     "build_context",
+    "Environment",
     "current_user_prefix",
+    "detect_environment",
     "ensure_ops_schema",
     "ensure_schema",
     "interactive_context",

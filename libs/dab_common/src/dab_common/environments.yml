@@ -1,0 +1,64 @@
+# =============================================================================
+# THE SINGLE SOURCE OF TRUTH FOR WHAT AN ENVIRONMENT IS
+# =============================================================================
+# Before this file existed, the workspace host was written out 31 times across 8
+# databricks.yml files, 2 scripts and 4 docs. Changing a workspace URL meant
+# finding all of them, and missing one meant a bundle deploying to the wrong
+# place with nothing to say so.
+#
+# WHO READS THIS
+#   runtime   dab_common.environments.detect_environment() maps the workspace
+#             host to an environment name, so a notebook never has to be told
+#             which environment it is in.
+#   CI        check_target_consistency verifies every bundle's targets against
+#             it. Targets stay hand-written; this file is what they are graded
+#             against. A host that disagrees fails the PR.
+#
+# WHY IT LIVES INSIDE THE WHEEL
+#   Because the runtime needs it on a cluster. Keeping it at the repo root and
+#   copying it in at build time would create exactly the second copy this file
+#   exists to eliminate.
+#
+# WHAT DOES *NOT* BELONG HERE
+#   Bundle variables. `photon`, `max_workers`, `oracle_concurrency`,
+#   `alert_email` and friends are declared by the bundles that actually use
+#   them. Measured: only the host, the mode and the environment name are
+#   identical across all eight bundles. Hoisting the rest would force every
+#   bundle to carry variables it has no use for.
+#
+#   Secrets. Nothing here is confidential - a workspace URL is not a secret -
+#   but nothing confidential may be added. Credentials live in Key Vault, are
+#   reached through a secret scope, and never appear in git.
+#
+# ADDING OR MOVING A WORKSPACE
+#   Edit this file, and only this file. CI will tell you which bundle targets
+#   now disagree. An unknown host raises at runtime rather than defaulting -
+#   defaulting to nonprod is how a job writes to the wrong catalog.
+# =============================================================================
+
+# First segment of every catalog name: <prefix>_<layer>_<env>.
+catalog_prefix: edp
+
+environments:
+  nonprod:
+    # PLACEHOLDER - replace with your real workspace URL.
+    # Also hosts every developer sandbox, via the `dev` bundle target.
+    workspace_host: https://adb-0000000000000001.1.azuredatabricks.net
+    description: Development and team integration. Deployed from `main`.
+
+  preprod:
+    workspace_host: https://adb-0000000000000002.2.azuredatabricks.net
+    description: QA and parity validation. Deployed from `release/*`, leads approve.
+
+  prod:
+    workspace_host: https://adb-0000000000000003.3.azuredatabricks.net
+    description: Production. Deployed from `release/*`, the client approves.
+
+# `dev` is NOT an environment - it is a bundle target that deploys into the
+# nonprod workspace with mode:development and a per-developer schema prefix.
+# Recording it here keeps the CI check honest about which host it expects.
+targets:
+  dev:      { environment: nonprod, mode: development }
+  nonprod:  { environment: nonprod, mode: production }
+  preprod:  { environment: preprod, mode: production }
+  prod:     { environment: prod,    mode: production }

@@ -7,6 +7,68 @@ for months.
 
 ---
 
+
+## 0. One file defines an environment
+
+<a name="environments-yml"></a>
+
+[`libs/dab_common/src/dab_common/environments.yml`](../libs/dab_common/src/dab_common/environments.yml)
+is the single source of truth for which workspace is which.
+
+```yaml
+catalog_prefix: edp
+environments:
+  prod:
+    workspace_host: https://adb-0000000000000003.3.azuredatabricks.net
+targets:
+  dev:  { environment: nonprod, mode: development }
+  prod: { environment: prod,    mode: production }
+```
+
+Before it existed, the workspace host appeared **31 times** across 8
+`databricks.yml` files, 2 scripts and 4 documents. Changing a URL meant finding
+all of them, and missing one meant a bundle deploying somewhere nobody intended
+with nothing to say so.
+
+### Who reads it
+
+| Reader | Uses it for |
+|---|---|
+| **Notebooks** | `interactive_context("us1")` detects the environment from the workspace. Developers never type one. |
+| **Deployed jobs** | Cross-checks the declared `env` against the workspace actually running the job. |
+| **CI** | `check_target_consistency` grades every bundle target's host, mode and `env` against it. |
+
+Bundle targets stay **hand-written and graded**, not generated — a wrong host
+fails the PR rather than silently deploying.
+
+### Why it lives inside the wheel
+
+The runtime needs it on a cluster, where the repo does not exist. Keeping it at
+the repo root and copying it in at build time would create exactly the second
+copy the file exists to eliminate. It ships as package data; a test asserts it
+is present in the built wheel.
+
+### What does not belong in it
+
+**Bundle variables.** Measured across all eight bundles, only the host, the mode
+and the environment name are genuinely identical per environment. `photon`,
+`max_workers`, `alert_email`, `run_as_sp` and the rest differ by bundle and stay
+with the bundle that uses them. Hoisting them would force every bundle to carry
+variables it has no use for.
+
+**Secrets.** A workspace URL is not one, and nothing confidential may be added —
+this file is in git and ships inside a wheel. A test checks for secret-shaped
+values.
+
+### Adding or moving a workspace
+
+Edit this file and only this file. CI names every bundle target that now
+disagrees. An unknown host **raises at runtime** rather than defaulting —
+defaulting to nonprod is how a job writes to the wrong catalog while every log
+line looks entirely normal.
+
+---
+
 ## 1. Workspaces
 
 | | nonprod (dev) | preprod | prod |
